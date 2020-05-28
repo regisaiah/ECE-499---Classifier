@@ -17,6 +17,10 @@
 #    - Added description blocks for each method.
 # Version 1.200524 - Austin Weir
 #    - Test
+# Version 1.200527 - IR
+#    - Changed the filename check for Grand Truth from "Early" to "Pre"
+#    - Added folder selection for test spreadsheet output.
+#    - Changed test output to use tabs instead.
 # -----------------------------------------------------------------------------
 
 # |MODULES|--------------------------------------------------------------------
@@ -38,6 +42,9 @@ import itertools
 
 class EEG_GUI():
     def __init__(self, master=None):
+        # Test Parameters (Make these into Widgets)
+        self.useMark = False
+
         self.master = master
         self.p = 0
         self.clf = SVC(gamma='auto', kernel='rbf')
@@ -232,7 +239,6 @@ class EEG_GUI():
             self.axs3.cla()
             self.filename = filedialog.askopenfilename()
             self.file = os.path.basename(self.filename)
-
             self.getRawData()
             self.selMrkmnu['menu'].delete(0, 'end')
             for mark in sorted(self.rawdf.Marker.unique()):
@@ -240,7 +246,9 @@ class EEG_GUI():
             self.getBands(test)
 
         else:
-            self.folder = filedialog.askdirectory()
+            self.folder = filedialog.askdirectory(title="Select the Folder Containing the Test Data")
+            if test == "Test":
+                self.folderout = filedialog.askdirectory(title="Select a Folder to Output the Feature Spreadsheets")
             self.tstCSVtxt.delete(1.0, END)
             for file in sorted(os.listdir(self.folder)):
                 self.file = file
@@ -335,8 +343,9 @@ class EEG_GUI():
         wband = [2 * x / fs for x in fband]
 
         self.eegdf = self.rawdf[['Marker', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].copy()
-        self.eegdf = self.eegdf[(self.eegdf['Marker'] < 20)].copy()
-        self.eegdf.reset_index(inplace=True)
+        if self.useMark:
+            self.eegdf = self.eegdf[(self.eegdf['Marker'] < 20)].copy()
+            self.eegdf.reset_index(inplace=True)
 
         size = self.eegdf.shape[0]
 
@@ -505,14 +514,15 @@ class EEG_GUI():
             feat.append(delta/phi)
             feat.append(delta/beta)
             feat.append(delta/theta)
-
+        # Check for 'Early' for the old dataset.
+        # Check for 'Pre' for the new Mining Dataset
         if test == "Train":
-            mental = "Not Fatigued" if 'Early' in self.filename else "Fatigued"
+            mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
             feat.append(mental)
             self.traindf.loc[self.n] = feat
             self.n += 1
         else:
-            mental = "Not Fatigued" if 'Early' in self.filename else "Fatigued"
+            mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
             feat.append(mental)
             self.testdf.loc[self.m] = feat
             self.m += 1
@@ -541,8 +551,8 @@ class EEG_GUI():
     #
     # -------------------------------------------------------------------------
     def test(self):
-        self.workbook = xlsxwriter.Workbook(
-            'D:/UVic/Term 3B/ECE 399/Test Data/Experiment{}_{}.xlsx'.format(self.p, self.file))
+
+        self.workbook = xlsxwriter.Workbook('{}/Experiment{}_{}.xlsx'.format(self.folderout, self.p, self.file))
         self.worksheet = self.workbook.add_worksheet()
         self.p += 1
 
@@ -552,8 +562,9 @@ class EEG_GUI():
         X = X.to_numpy()
         y = self.testdf.loc[:, "Class"].to_numpy()
         score = self.clf.score(X,y)
-        print(self.file, score, self.testdf.shape[0])
-        self.tstCSVtxt.insert(INSERT, "{}\t{}\t{}\n".format(self.file, score, self.testdf.shape[0]))
+        scoretxt = "{}\t{}\t{}\n".format(self.file, score, self.testdf.shape[0])
+        print(scoretxt)
+        self.tstCSVtxt.insert(INSERT, scoretxt)
         self.tstCSVtxt.update_idletasks()
         y = self.clf.predict(X)
         self.testdf["Class"] = y
