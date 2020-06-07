@@ -12,21 +12,28 @@
 #
 # Date Created:     May 22, 2020
 #
-# Version 1.200522 - Isaiah Regacho
+# v1.200522 - Isaiah Regacho
 #    - Script adopted from original ECE 399 project
 #    - Added description blocks for each method.
-# Version 1.200524 - Austin Weir
+# v1.200524 - Austin Weir
 #    - Test
-# Version 1.200527 - IR
+# v1.200527 - IR
 #    - Changed the filename check for Grand Truth from "Early" to "Pre"
 #    - Added folder selection for test spreadsheet output.
 #    - Changed test output to use tabs instead.
+# v1.200528 - IR
+#    - Initialize Classifier once Train Classifier is called.
+#    - Added Flags for Classifier Options
+# v1.200606 - IR
+#    - Added Font Changer
+#    - Modified the GUI
 # -----------------------------------------------------------------------------
 
 # |MODULES|--------------------------------------------------------------------
 from tkinter import *
 from tkinter.ttk import *
 from tkinter import filedialog
+import tkinter.font
 import pandas
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -44,22 +51,30 @@ class EEG_GUI():
     def __init__(self, master=None):
         # Test Parameters (Make these into Widgets)
         self.useMark = False
+        self.useFeatures = False
 
         self.master = master
         self.p = 0
-        self.clf = SVC(gamma='auto', kernel='rbf')
+
         self.filename = ""
         self.rawdf = pandas.DataFrame()
         self.eegdf = pandas.DataFrame()
         self.trainheading = []
-        for sensor in ['1', '2', '3', '4']:
-            for feat in range(1, 13):
-                self.trainheading.append('Sen{}F{}'.format(sensor, feat))
+        if self.useFeatures:
+            for sensor in ['1', '2', '3', '4']:
+                for feat in range(1, 13):
+                    self.trainheading.append('Sen{}F{}'.format(sensor, feat))
+        else:
+            self.trainheading = np.linspace(0.0, 250 / 2, 1000 // 2 + 1).tolist()
         self.trainheading.append('Class')
         self.traindf = pandas.DataFrame(columns=self.trainheading)
         self.testdf = pandas.DataFrame(columns=self.trainheading)
         fftheading = ['Freq', 'EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']
         self.fftdf = pandas.DataFrame(columns=fftheading)
+        self.fatiguedf = pandas.DataFrame(columns=fftheading)
+        self.freshdf = pandas.DataFrame(columns=fftheading)
+        self.font = itertools.cycle(sorted(tkinter.font.families()))
+
         self.n = 0
         self.m = 0
 
@@ -68,17 +83,21 @@ class EEG_GUI():
         self.master.rowconfigure(0, weight=1)
         self.master.columnconfigure(0, weight=1)
 
-        self.pageTitle = ["Select Data", "Time Domain", "Frequency Domain", "Marked Data", "Training Data"]
+        self.pageTitle = ["Select Data", "Time Domain", "Frequency Domain", "Marked Data", "Training Data",
+                          "Feature Plots"]
 
         self.mainpage = Frame(self.master)
         self.mainpage.grid_rowconfigure(1, weight=1)
         self.mainpage.grid_columnconfigure(0, weight=1)
         self.mainpage.grid(sticky=N+E+W+S)
 
-        self.title = Label(self.mainpage, text="Brain Assessment of Mental Fatigue", font="Arial 20 bold")
+        self.title = Label(self.mainpage, text="Brain Assessment of Mental Fatigue",
+                           font=('Comic Sans MS', 20,  'bold'))
+        self.title.bind("<Button-1>", lambda event, x=20, y='bold': self.onlabel(event, font=[x, y]))
         self.title.grid(row=0)
         s = Style()
-        s.configure('TNotebook.Tab', font=('Arial', '16'), padding=[50, 10])
+        s.configure('TNotebook.Tab', font=('Arial', '14'), width=15, padding=[5, 5])
+        s.configure('TNotebook', tabmargins=[-1, 0, -1, 0], tabposition='wn', borderwidth=0, padding=[5, 5])
         self.note = Notebook(self.mainpage)
         self.note.grid(row=1, sticky=N+E+W+S, padx=10, pady=10)
 
@@ -112,7 +131,7 @@ class EEG_GUI():
         self.preCSVlbl = Label(self.page[0], text="Data Preview", font="Arial 14 bold")
         self.preCSVlbl.grid(row=0, column=1, pady=10, padx=10)
         self.preCSVtxt0 = Text(self.page[0])
-        self.preCSVtxt0.grid(row=1, column=1, sticky=N+E+W+S)
+        self.preCSVtxt0.grid(row=1, column=1, sticky=N+E+W+S, pady=10, padx=10)
 
 
         # Page 1
@@ -147,7 +166,7 @@ class EEG_GUI():
         self.fig1, self.axs1 = plt.subplots(1, 1)
 
         eegline = FigureCanvasTkAgg(self.fig1, self.page[1])
-        eegline.get_tk_widget().grid(row=2, sticky=N+E+W+S)
+        eegline.get_tk_widget().grid(row=2, sticky=N+E+W+S, pady=10, padx=10)
 
         cid1 = self.fig1.canvas.mpl_connect('button_press_event', self.onclick)
 
@@ -156,7 +175,7 @@ class EEG_GUI():
         self.fig2, self.axs2 = plt.subplots(1, 1)
 
         eegfft = FigureCanvasTkAgg(self.fig2, self.page[2])
-        eegfft.get_tk_widget().grid(row=0, sticky=N+E+W+S)
+        eegfft.get_tk_widget().grid(row=0, sticky=N+E+W+S, pady=10, padx=10)
 
         cid2 = self.fig2.canvas.mpl_connect('button_press_event', self.onclick)
 
@@ -186,7 +205,7 @@ class EEG_GUI():
 
         self.fig3, self.axs3 = plt.subplots(1, 1)
         eegtrain = FigureCanvasTkAgg(self.fig3, self.page[3])
-        eegtrain.get_tk_widget().grid(row=1, sticky=N+E+W+S)
+        eegtrain.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
 
         # Page 4
         for i, w in enumerate([1, 1]):
@@ -200,9 +219,18 @@ class EEG_GUI():
         self.traModbtn = Button(self.page[4], text="Train Model", command=self.train)
         self.traModbtn.grid(row=1, column=1)
         self.traCSVtxt = Text(self.page[4])
-        self.traCSVtxt.grid(row=2, column=0, sticky=N+E+W+S)
+        self.traCSVtxt.grid(row=2, column=0, sticky=N+E+W+S, pady=10, padx=10)
         self.tstCSVtxt = Text(self.page[4])
-        self.tstCSVtxt.grid(row=2, column=1, sticky=N+E+W+S)
+        self.tstCSVtxt.grid(row=2, column=1, sticky=N+E+W+S, pady=10, padx=10)
+
+        # Page 5
+        self.y5 = []
+        self.fig5, self.axs5 = plt.subplots(1, 1)
+
+        featplt = FigureCanvasTkAgg(self.fig5, self.page[5])
+        featplt.get_tk_widget().grid(row=0, sticky=N+E+W+S, pady=10, padx=10)
+
+        cid5 = self.fig5.canvas.mpl_connect('button_press_event', self.onclick5)
 
     # |METHODS|----------------------------------------------------------------
     # -------------------------------------------------------------------------
@@ -224,6 +252,34 @@ class EEG_GUI():
         self.axs2.set_title('Frequency Domain:{}'.format(self.file))
         self.fig1.canvas.draw()
         self.fig2.canvas.draw()
+
+    # -------------------------------------------------------------------------
+    # onclick
+    #
+    # Description:
+    #       This method is used to cycle the displayed plot on page 5. Clicking
+    # on the figure will draw the next set of data in the itertools objects.
+    #
+    # -------------------------------------------------------------------------
+    def onclick5(self, event):
+        self.axs5.cla()
+        y5 = next(self.ys5)
+        y5.plot(kind='line', x='Feature', legend=True, ax=self.axs1, linewidth=0.2)
+        self.axs5.set_title('Features')
+        self.fig5.canvas.draw()
+
+    # -------------------------------------------------------------------------
+    # onclick
+    #
+    # Description:
+    #       This method is used to cycle the displayed plot on page 5. Clicking
+    # on the figure will draw the next set of data in the itertools objects.
+    #
+    # -------------------------------------------------------------------------
+    def onlabel(self, event, font):
+        new = next(self.font)
+        event.widget.config(font=(new, font[0], font[1]))
+        print(new)
 
     # -------------------------------------------------------------------------
     # getCSV
@@ -307,7 +363,8 @@ class EEG_GUI():
             #b, a = signal.butter(4, 2 * 125 / fs)
             #self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
 
-        self.fftdf['Freq'] = pandas.Series(np.linspace(0.0, fs / 2, 1000 // 2))
+        self.fftdf['Freq'] = pandas.Series(np.linspace(0.0, fs / 2, 1000 // 2 + 1))
+
         for i in range(0, int((.004*size)//1), window):
             df = self.eegdf.loc[(self.eegdf.Time >= i) & (self.eegdf.Time < (i + window))]
             N = df.shape[0]
@@ -473,53 +530,64 @@ class EEG_GUI():
     #
     # -------------------------------------------------------------------------
     def extractFeatures(self, freqdf, test):
-        deltadf = freqdf.loc[(freqdf['Freq'] >= 0) & (freqdf['Freq'] < 4)]
-        thetadf = freqdf.loc[(freqdf['Freq'] >= 4) & (freqdf['Freq'] < 8)]
-        alphadf = freqdf.loc[(freqdf['Freq'] >= 8) & (freqdf['Freq'] < 15)]
-        betadf = freqdf.loc[(freqdf['Freq'] >= 15) & (freqdf['Freq'] < 32)]
-        gammadf = freqdf.loc[(freqdf['Freq'] >= 32) & (freqdf['Freq'] < 100)]
-
-        mean = {
-            "delta": 0,
-            "theta": 1,
-            "alpha": 2,
-            "beta": 3,
-            "gamma": 4,
-            "phi": 5,
-        }
+        # Holds the features for Machine Learning
         feat = []
-        for i, sensor in enumerate(['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']):
-            meanlist = []
-            for df in [deltadf, thetadf, alphadf, betadf, gammadf]:
-                meanlist.append(df[sensor].mean())
-            meanlist.append(freqdf[sensor].mean())
+        if self.useFeatures:
+            deltadf = freqdf.loc[(freqdf['Freq'] >= 0) & (freqdf['Freq'] < 4)]
+            thetadf = freqdf.loc[(freqdf['Freq'] >= 4) & (freqdf['Freq'] < 8)]
+            alphadf = freqdf.loc[(freqdf['Freq'] >= 8) & (freqdf['Freq'] < 15)]
+            betadf = freqdf.loc[(freqdf['Freq'] >= 15) & (freqdf['Freq'] < 32)]
+            gammadf = freqdf.loc[(freqdf['Freq'] >= 32) & (freqdf['Freq'] < 100)]
 
-            delta = meanlist[mean['delta']]
-            theta = meanlist[mean['theta']]
-            alpha = meanlist[mean['alpha']]
-            beta = meanlist[mean['beta']]
-            gamma = meanlist[mean['gamma']]
-            phi = meanlist[mean['phi']]
-            if (delta * theta * alpha * beta * gamma * phi) == 0:
-                return
-            feat.append(delta)
-            feat.append(theta)
-            feat.append(alpha)
-            feat.append(theta/beta)
-            feat.append(theta/alpha)
-            feat.append(theta/phi)
-            feat.append(theta/(beta + alpha + gamma))
-            feat.append(delta/(beta + alpha + gamma))
-            feat.append(delta/alpha)
-            feat.append(delta/phi)
-            feat.append(delta/beta)
-            feat.append(delta/theta)
+            mean = {
+                "delta": 0,
+                "theta": 1,
+                "alpha": 2,
+                "beta": 3,
+                "gamma": 4,
+                "phi": 5,
+            }
+
+            for i, sensor in enumerate(['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']):
+                meanlist = []
+                for df in [deltadf, thetadf, alphadf, betadf, gammadf]:
+                    meanlist.append(df[sensor].mean())
+                meanlist.append(freqdf[sensor].mean())
+
+                delta = meanlist[mean['delta']]
+                theta = meanlist[mean['theta']]
+                alpha = meanlist[mean['alpha']]
+                beta = meanlist[mean['beta']]
+                gamma = meanlist[mean['gamma']]
+                phi = meanlist[mean['phi']]
+                if (delta * theta * alpha * beta * gamma * phi) == 0:
+                    return
+                feat.append(delta)
+                feat.append(theta)
+                feat.append(alpha)
+                feat.append(theta/beta)
+                feat.append(theta/alpha)
+                feat.append(theta/phi)
+                feat.append(theta/(beta + alpha + gamma))
+                feat.append(delta/(beta + alpha + gamma))
+                feat.append(delta/alpha)
+                feat.append(delta/phi)
+                feat.append(delta/beta)
+                feat.append(delta/theta)
+        else:
+            feat = freqdf[['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']].sum(axis=1).tolist()
         # Check for 'Early' for the old dataset.
-        # Check for 'Pre' for the new Mining Dataset
+        # Check for 'pre' for the new Mining Dataset
         if test == "Train":
             mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
             feat.append(mental)
             self.traindf.loc[self.n] = feat
+            if 'pre' in self.filename:
+                self.freshdf = self.freshdf.add(freqdf, fill_value=0)
+            else:
+                self.fatiguedf = self.fatiguedf.add(freqdf, fill_value=0)
+            self.fatiguedf['Freq'] = pandas.Series(np.linspace(0.0, 250 / 2, 1000 // 2 + 1))
+            self.freshdf['Freq'] = pandas.Series(np.linspace(0.0, 250 / 2, 1000 // 2 + 1))
             self.n += 1
         else:
             mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
@@ -541,6 +609,9 @@ class EEG_GUI():
 
         X = X.to_numpy()
         y = self.traindf.loc[:, "Class"].to_numpy()
+        self.clf = SVC(gamma='auto', kernel='rbf')
+        self.y5 = [self.fresdf, self.fatiguedf]
+        self.ys5 = itertools.cycle(self.y5)
         self.clf.fit(X, y)
 
     # -------------------------------------------------------------------------
@@ -577,8 +648,9 @@ class EEG_GUI():
                 col += 1
             row += 1
 
-        self.worksheet.write(0, col, "=COUNTIF(AW:AW,\"Fatigued\")")
-        self.worksheet.write(1, col, "=COUNTA(AW:AW)")
+        prediction = "AW" if self.useFeatures else "SG"
+        self.worksheet.write(0, col, "=COUNTIF({}:{},\"Fatigued\")".format(prediction, prediction))
+        self.worksheet.write(1, col, "=COUNTA({}:{})".format(prediction, prediction))
         self.workbook.close()
         self.testdf = self.testdf.iloc[0:0]
         self.m = 0
