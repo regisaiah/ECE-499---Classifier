@@ -44,8 +44,8 @@ import xlsxwriter
 import os
 import itertools as it
 
-import cProfile, pstats, io
-from pstats import SortKey
+# import cProfile, pstats, io
+# from pstats import SortKey
 
 
 class EEG_GUI():
@@ -68,6 +68,7 @@ class EEG_GUI():
                           'Controls.TLabel': [],
                           'Display.TLabel': [],
                           'ControlsL.TLabel': [],
+                          'DisplayL.TLabel': [],
                           'Main.TNotebook': [],
                           'TButton': [],
                           'TMenubutton': []}
@@ -86,6 +87,8 @@ class EEG_GUI():
                              font=self.fontpreset['Heading'])
         self.style.configure('ControlsL.TLabel', foreground=uvicyellow, background=uvicdarkblue, padding=[5, 5],
                              font=self.fontpreset['Label'])
+        self.style.configure('DisplayL.TLabel', foreground=uvicdarkblue, background=fadeyellow, padding=[5, 5],
+                             font=self.fontpreset['Button'])
 
         # Ttk Style Separator Settings
         self.style.configure('Main.TSeparator', background=uvicyellow)
@@ -117,9 +120,10 @@ class EEG_GUI():
         self.style.map('TScale', background=[('active', uvicred)])
         self.style.configure('TScale', background=uvicyellow, troughcolor=uvicblue)
         self.style.map('TButton', background=[('active', uvicred)])
-        self.style.configure('TButton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue, font=self.fontpreset['Button'], width=20)
+        self.style.configure('TButton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue, font=self.fontpreset['Button'], width=15)
         self.style.map('TMenubutton', background=[('active', uvicred)])
         self.style.configure('TMenubutton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue, font=self.fontpreset['Button'], width=10)
+        self.style.configure('TProgressbar', background=uvicyellow, troughcolor=uvicblue)
 
         # Matplotlib.Pyplot Settings
         plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.9, wspace=0, hspace=0)
@@ -155,11 +159,9 @@ class EEG_GUI():
         self.allLabels['Main.TNotebook'].append(self.note)
 
         self.pageTitle = ["View Data",
-                          "Marked Data",
-                          "Train Classifier",
                           "Feature Plots",
-                          "Austin's Example",
-                          "Blank1"]
+                          "Marked Data",
+                          "Train Classifier"]
         self.page = []
         self.pagectr = []
         self.pagedis = []
@@ -216,8 +218,8 @@ class EEG_GUI():
         self.varXwidth.set(400)
         self.varXwidth.trace('w', self.ploteeg)
         self.varXoffset.trace('w', self.ploteeg)
-        self.axiWidsld = ttk.Scale(self.pagectr[0], from_=1, to=400, variable=self.varXwidth)
-        self.axiOffsld = ttk.Scale(self.pagectr[0], from_=0, to=400, variable=self.varXoffset)
+        self.axiWidsld = ttk.Scale(self.pagectr[0], from_=1, to=400, variable=self.varXwidth, length=150)
+        self.axiOffsld = ttk.Scale(self.pagectr[0], from_=0, to=400, variable=self.varXoffset, length=150)
         self.axiWidsld.grid(row=6, column=1, sticky=E+W)
         self.axiOffsld.grid(row=7, column=1, sticky=E+W)
 
@@ -228,7 +230,7 @@ class EEG_GUI():
         self.varXFwidth = tk.DoubleVar()
         self.varXFwidth.set(100)
         self.varXFwidth.trace('w', self.ploteeg)
-        self.axiFWidsld = ttk.Scale(self.pagectr[0], from_=1, to=100, variable=self.varXFwidth)
+        self.axiFWidsld = ttk.Scale(self.pagectr[0], from_=1, to=100, variable=self.varXFwidth, length=150)
         self.axiFWidsld.grid(row=8, column=1, sticky=E+W)
 
         self.domConsep = ttk.Separator(self.pagectr[0], style='Controls.TSeparator')
@@ -278,131 +280,252 @@ class EEG_GUI():
         self.fig1.canvas.mpl_connect('button_press_event', self.switchplot)
         self.fig2.canvas.mpl_connect('button_press_event', self.switchplot)
 
-        # Page 1 - Marked Data Control
-        for i, w in enumerate([0, 1]):
+        # Page 1 - Feature Plot Control
+        for i, w in enumerate([0]):
             self.pagectr[1].grid_columnconfigure(i, weight=w)
-        for i, w in enumerate([0, 0, 0, 1]):
+        for i, w in enumerate([0, 0, 0, 0, 1]):
             self.pagectr[1].grid_rowconfigure(i, weight=w)
 
         self.selMrksep = ttk.Separator(self.pagectr[1], style='Controls.TSeparator')
         self.selMrksep.grid(row=0, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
 
-        self.selMrklbl = ttk.Label(self.pagectr[1], text='Select Marker', style='Controls.TLabel')
+        self.selMrklbl = ttk.Label(self.pagectr[1], text='Select Feature', style='Controls.TLabel')
+        self.selMrklbl.grid(row=0, column=0, columnspan=2, pady=5, padx=5)
+        self.allLabels['Controls.TLabel'].append(self.selMrklbl)
+
+        self.varXax = tk.StringVar()
+        #self.varXax.set(None)
+        self.varXax.trace('w', self.plotFeature)
+        self.varYax = tk.StringVar()
+        #self.varYax.set(0)
+        self.varYax.trace('w', self.plotFeature)
+        self.mnuXaxlbl = ttk.Label(self.pagectr[1], text='X-Axis', style='ControlsL.TLabel')
+        self.mnuXaxlbl.grid(row=1, column=0, sticky=E, pady=5, padx=5)
+        self.allLabels['ControlsL.TLabel'].append(self.mnuXaxlbl)
+        self.mnuYaxlbl = ttk.Label(self.pagectr[1], text='Y-Axis', style='ControlsL.TLabel')
+        self.mnuYaxlbl.grid(row=2, column=0, sticky=E, pady=5, padx=5)
+        self.allLabels['ControlsL.TLabel'].append(self.mnuYaxlbl)
+        self.selXaxmnu = ttk.OptionMenu(self.pagectr[1], variable=self.varXax, style='TMenubutton')
+        self.selXaxmnu.grid(row=1, column=1, sticky=W)
+        self.allLabels['TMenubutton'].append(self.selXaxmnu)
+        self.selYaxmnu = ttk.OptionMenu(self.pagectr[1], variable=self.varYax, style='TMenubutton')
+        self.selYaxmnu.grid(row=2, column=1, sticky=W)
+        self.allLabels['TMenubutton'].append(self.selYaxmnu)
+
+        self.endsep1 = ttk.Separator(self.pagectr[1], style='Controls.TSeparator')
+        self.endsep1.grid(row=3, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
+
+        # Page 1 - Feature Plot Display
+        for i, w in enumerate([1]):
+            self.pagedis[1].grid_columnconfigure(i, weight=w)
+        for i, w in enumerate([0, 1]):
+            self.pagedis[1].grid_rowconfigure(i, weight=w)
+
+        self.feaPlosep = ttk.Separator(self.pagedis[1], style='Display.TSeparator')
+        self.feaPlosep.grid(row=0, column=0, sticky=E+W, pady=5, padx=50)
+        self.feaPlolbl = ttk.Label(self.pagedis[1], text='Feature Plot', style='Display.TLabel')
+        self.feaPlolbl.grid(row=0, column=0, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.feaPlolbl)
+
+        self.fig3, self.axs3 = plt.subplots(1, 1)
+        plt.tight_layout(pad=2)
+        featplt = FigureCanvasTkAgg(self.fig3, self.pagedis[1])
+        featplt.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
+        self.fig3.patch.set_facecolor(fadeyellow)
+
+        # Page 2 - Marked Data Control
+        for i, w in enumerate([0, 1]):
+            self.pagectr[2].grid_columnconfigure(i, weight=w)
+        for i, w in enumerate([0, 0, 0, 1]):
+            self.pagectr[2].grid_rowconfigure(i, weight=w)
+
+        self.selMrksep = ttk.Separator(self.pagectr[2], style='Controls.TSeparator')
+        self.selMrksep.grid(row=0, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
+
+        self.selMrklbl = ttk.Label(self.pagectr[2], text='Select Marker', style='Controls.TLabel')
         self.selMrklbl.grid(row=0, column=0, columnspan=2, pady=5, padx=5)
         self.allLabels['Controls.TLabel'].append(self.selMrklbl)
 
         self.varMrk = tk.IntVar()
         self.varMrk.set(0)
         self.varMrk.trace('w', self.plotMarker)
-        self.mnuMrklbl = ttk.Label(self.pagectr[1], text='Marker', style='ControlsL.TLabel')
+        self.mnuMrklbl = ttk.Label(self.pagectr[2], text='Marker', style='ControlsL.TLabel')
         self.mnuMrklbl.grid(row=1, column=0, sticky=E, pady=5, padx=5)
         self.allLabels['ControlsL.TLabel'].append(self.mnuMrklbl)
-        self.selMrkmnu = ttk.OptionMenu(self.pagectr[1], variable=self.varMrk, style='TMenubutton')
+        self.selMrkmnu = ttk.OptionMenu(self.pagectr[2], variable=self.varMrk, style='TMenubutton')
         self.selMrkmnu.grid(row=1, column=1, sticky=W)
         self.allLabels['TMenubutton'].append(self.selMrkmnu)
 
-        self.endsep1 = ttk.Separator(self.pagectr[1], style='Controls.TSeparator')
-        self.endsep1.grid(row=2, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
+        self.endsep2 = ttk.Separator(self.pagectr[2], style='Controls.TSeparator')
+        self.endsep2.grid(row=2, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
 
-        # Page 1 - Marked Data Display
+        # Page 2 - Marked Data Display
         for i, w in enumerate([1]):
-            self.pagedis[1].grid_columnconfigure(i, weight=w)
+            self.pagedis[2].grid_columnconfigure(i, weight=w)
         for i, w in enumerate([0, 1]):
-            self.pagedis[1].grid_rowconfigure(i, weight=w)
-        self.mrkPlosep = ttk.Separator(self.pagedis[1], style='Display.TSeparator')
-        self.mrkPlosep.grid(row=0, column=0, sticky=E+W, pady=5, padx=200)
+            self.pagedis[2].grid_rowconfigure(i, weight=w)
+        self.mrkPlosep = ttk.Separator(self.pagedis[2], style='Display.TSeparator')
+        self.mrkPlosep.grid(row=0, column=0, sticky=E+W, pady=5, padx=50)
 
-        self.mrkPlolbl = ttk.Label(self.pagedis[1], text='Marker Plot', style='Display.TLabel')
+        self.mrkPlolbl = ttk.Label(self.pagedis[2], text='Marker Plot', style='Display.TLabel')
         self.mrkPlolbl.grid(row=0, column=0, pady=5, padx=5)
         self.allLabels['Display.TLabel'].append(self.mrkPlolbl)
 
-        self.fig3, self.axs3 = plt.subplots(1, 1)
+        self.fig4, self.axs4 = plt.subplots(1, 1)
         plt.tight_layout(pad=2)
-        eegtrain = FigureCanvasTkAgg(self.fig3, self.pagedis[1])
-        eegtrain.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
-        self.fig3.patch.set_facecolor(fadeyellow)
+        markplt = FigureCanvasTkAgg(self.fig4, self.pagedis[2])
+        markplt.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
+        self.fig4.patch.set_facecolor(fadeyellow)
 
-        # Page 2 - Train Classifier Controls
+        # Page 3 - Train Classifier Controls
         for i, w in enumerate([1]):
-            self.pagectr[2].grid_columnconfigure(i, weight=w)
-        for i, w in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]):
-            self.pagectr[2].grid_rowconfigure(i, weight=w)
+            self.pagectr[3].grid_columnconfigure(i, weight=w)
+        for i, w in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]):
+            self.pagectr[3].grid_rowconfigure(i, weight=w)
 
-        self.modConsep = ttk.Separator(self.pagectr[2], style='Controls.TSeparator')
-        self.modConsep.grid(row=0, column=0, columnspan=2,  sticky=E+W, pady=5, padx=5)
+        self.modConsep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
+        self.modConsep.grid(row=0, column=0, columnspan=3,  sticky=E+W, pady=5, padx=5)
 
-        self.modConlbl = ttk.Label(self.pagectr[2], text='Model Controls', style='Controls.TLabel')
-        self.modConlbl.grid(row=0, column=0, columnspan=2, pady=5, padx=5)
+        self.modConlbl = ttk.Label(self.pagectr[3], text='Model Controls', style='Controls.TLabel')
+        self.modConlbl.grid(row=0, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['Controls.TLabel'].append(self.modConlbl)
 
-        self.selDatbtn = ttk.Button(self.pagectr[2], text="Select Data Folder", command=lambda x="Train": self.getcsv(x))
-        self.selDatbtn.grid(row=1, column=0, columnspan=2, pady=5, padx=5)
+        self.selDatbtn = ttk.Button(self.pagectr[3], text="Select Data", command=lambda x="Train": self.getcsv(x))
+        self.selDatbtn.grid(row=1, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.selDatbtn)
 
-        self.traModbtn = ttk.Button(self.pagectr[2], text="Train Model", command=self.train)
-        self.traModbtn.grid(row=2, column=0, columnspan=2, pady=5, padx=5)
+        self.traModbtn = ttk.Button(self.pagectr[3], text="Train Model", command=self.train)
+        self.traModbtn.grid(row=2, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.traModbtn)
 
-        self.tstModbtn = ttk.Button(self.pagectr[2], text="Test Model", command=lambda x="Test": self.getcsv(x))
-        self.tstModbtn.grid(row=3, column=0, columnspan=2, pady=5, padx=5)
+        self.tstModbtn = ttk.Button(self.pagectr[3], text="Test Model", command=lambda x="Test": self.getcsv(x))
+        self.tstModbtn.grid(row=3, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstModbtn)
 
-        self.filConsep = ttk.Separator(self.pagectr[2], style='Controls.TSeparator')
-        self.filConsep.grid(row=4, column=0, columnspan=2, sticky=E + W, pady=5, padx=5)
+        self.filConsep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
+        self.filConsep.grid(row=4, column=0, columnspan=3, sticky=E + W, pady=5, padx=5)
 
-        self.filConlbl = ttk.Label(self.pagectr[2], text='Filter Controls', style='Controls.TLabel')
-        self.filConlbl.grid(row=4, column=0, columnspan=2, pady=5, padx=5)
+        self.filConlbl = ttk.Label(self.pagectr[3], text='Filter Controls', style='Controls.TLabel')
+        self.filConlbl.grid(row=4, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['Controls.TLabel'].append(self.filConlbl)
 
-        self.filHiglbl = ttk.Label(self.pagectr[2], text="High:", style='ControlsL.TLabel')
-        self.filHiglbl.grid(row=5, column=0, sticky=W, pady=2, padx=2)
+        self.filHiglbl = ttk.Label(self.pagectr[3], text="High:", style='ControlsL.TLabel')
+        self.filHiglbl.grid(row=5, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filHiglbl)
 
-        self.filLowlbl = ttk.Label(self.pagectr[2], text="Low:", style='ControlsL.TLabel')
-        self.filLowlbl.grid(row=7, column=0, sticky=W, pady=2, padx=2)
+        self.filLowlbl = ttk.Label(self.pagectr[3], text="Low:", style='ControlsL.TLabel')
+        self.filLowlbl.grid(row=6, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filLowlbl)
 
-        self.varHighCut = tk.IntVar()
-        self.varLowCut = tk.IntVar()
-        self.varHighCut.set(249)
-        self.varLowCut.set(1)
-        self.varHighCut.trace('w', self.limitlower)
-        self.varLowCut.trace('w', self.limitupper)
-        self.filHigsld = ttk.Scale(self.pagectr[2], from_=1, to=250, variable=self.varHighCut)
-        self.filLowsld = ttk.Scale(self.pagectr[2], from_=1, to=250, variable=self.varLowCut)
-        self.filHigsld.grid(row=6, column=0, columnspan=2, sticky=E+W)
-        self.filLowsld.grid(row=8, column=0, columnspan=2, sticky=E+W)
+        self.filDurlbl = ttk.Label(self.pagectr[3], text="Duration:", style='ControlsL.TLabel')
+        self.filDurlbl.grid(row=7, column=0, sticky=E, pady=2, padx=0)
+        self.allLabels['ControlsL.TLabel'].append(self.filDurlbl)
 
-        self.filHigval = ttk.Label(self.pagectr[2], text='124.5', style='ControlsL.TLabel')
-        self.filHigval.grid(row=5, column=1, sticky=W, pady=2, padx=2)
+        self.varHighCut = tk.IntVar()
+        self.varHighCut.set(249)
+        self.varHighCut.trace('w', self.limitlower)
+        self.filHigsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varHighCut, length=150)
+        self.filHigsld.grid(row=5, column=1, sticky=E + W)
+
+        self.varLowCut = tk.IntVar()
+        self.varLowCut.set(1)
+        self.varLowCut.trace('w', self.limitupper)
+        self.filLowsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varLowCut, length=150)
+        self.filLowsld.grid(row=6, column=1, sticky=E+W)
+
+        self.varWindow = tk.IntVar()
+        self.varWindow.set(4)
+        self.varWindow.trace('w', self.updateduration)
+        self.filWinsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varWindow, length=150)
+        self.filWinsld.grid(row=7, column=1, sticky=E+W)
+
+        self.filHigval = ttk.Label(self.pagectr[3], text='124.5', style='ControlsL.TLabel')
+        self.filHigval.grid(row=5, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filHigval)
-        self.filLowval = ttk.Label(self.pagectr[2], text='0.5', style='ControlsL.TLabel')
-        self.filLowval.grid(row=7, column=1, sticky=W, pady=2, padx=2)
+        self.filLowval = ttk.Label(self.pagectr[3], text='0.5', style='ControlsL.TLabel')
+        self.filLowval.grid(row=6, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filLowval)
 
-        self.bar = ttk.Progressbar(self.pagectr[2])
-        self.bar.grid(row=9, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
+        self.filDurval = ttk.Label(self.pagectr[3], text='4.0 s', style='ControlsL.TLabel')
+        self.filDurval.grid(row=7, column=2, sticky=W, pady=2, padx=2)
+        self.allLabels['ControlsL.TLabel'].append(self.filDurval)
+
+        self.endsep3 = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
+        self.endsep3.grid(row=8, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
+
+        self.bar = ttk.Progressbar(self.pagectr[3])
+        self.bar.grid(row=8, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
         self.bar.grid_remove()
 
-        self.senScolbl = ttk.Label(self.pagectr[2], text="Sensitivity:", style='ControlsL.TLabel')
-        self.senScolbl.grid(row=10, column=0, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.senScolbl)
+        self.modFeasep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
+        self.modFeasep.grid(row=0, column=3, columnspan=2, sticky=E+W, pady=5, padx=5)
+        self.modFealbl = ttk.Label(self.pagectr[3], text='Feature Selection', style='Controls.TLabel')
+        self.modFealbl.grid(row=0, column=3, columnspan=2, pady=5, padx=5)
+        self.allLabels['Controls.TLabel'].append(self.modFealbl)
 
-        self.speScolbl = ttk.Label(self.pagectr[2], text="Specificity:", style='ControlsL.TLabel')
-        self.speScolbl.grid(row=11, column=0, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.speScolbl)
+        self.includelist = tk.StringVar()
+        self.excludelist = tk.StringVar()
+        self.tstInclst = tk.Listbox(self.pagectr[3], selectmode='extended', listvariable=self.includelist)
+        self.tstInclst.grid(row=1, column=3, rowspan=10, sticky=N+E+W+S, pady=10, padx=10)
+        self.tstExclst = tk.Listbox(self.pagectr[3], selectmode='extended', listvariable=self.excludelist)
+        self.tstExclst.grid(row=1, column=4, rowspan=10, sticky=N+E+W+S, pady=10, padx=10)
 
-        self.posScolbl = ttk.Label(self.pagectr[2], text="Positive Predictive:", style='ControlsL.TLabel')
-        self.posScolbl.grid(row=12, column=0, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.posScolbl)
+        self.tstExcbtn = ttk.Button(self.pagectr[3], text="Exclude", command=self.exclude)
+        self.tstExcbtn.grid(row=11, column=3, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.tstExcbtn)
 
-        self.negScolbl = ttk.Label(self.pagectr[2], text="Negative Predictive:", style='ControlsL.TLabel')
-        self.negScolbl.grid(row=13, column=0, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.negScolbl)
+        self.tstIncbtn = ttk.Button(self.pagectr[3], text="Include", command=self.include)
+        self.tstIncbtn.grid(row=11, column=4, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.tstIncbtn)
 
-        self.perScolbl = ttk.Label(self.pagectr[2], text="Overall Performance", style='ControlsL.TLabel')
-        self.perScolbl.grid(row=14, column=0, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.perScolbl)
+        self.tstRembtn = ttk.Button(self.pagectr[3], text="Exclude All", command=self.removefeat)
+        self.tstRembtn.grid(row=12, column=3, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.tstRembtn)
+
+        self.tstAddbtn = ttk.Button(self.pagectr[3], text="Include All", command=self.addfeat)
+        self.tstAddbtn.grid(row=12, column=4, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.tstAddbtn)
+
+        # Page 3 - Train Classifier Display
+        for i, w in enumerate([0, 0, 1]):
+            self.pagedis[3].grid_columnconfigure(i, weight=w)
+        for i, w in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 1]):
+            self.pagedis[3].grid_rowconfigure(i, weight=w)
+
+        self.claRessep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.claRessep.grid(row=0, column=0, columnspan=2, sticky=E+W, pady=5, padx=10)
+        self.claReslbl = ttk.Label(self.pagedis[3], text="Classifier Score", style='Display.TLabel')
+        self.claReslbl.grid(row=0, column=0, columnspan=2, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.claReslbl)
+
+        self.claScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.claScosep.grid(row=0, column=2, sticky=E+W, pady=5, padx=50)
+        self.claScolbl = ttk.Label(self.pagedis[3], text="Test Score by File", style='Display.TLabel')
+        self.claScolbl.grid(row=0, column=2, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.claScolbl)
+
+        self.senScolbl = ttk.Label(self.pagedis[3], text="Sensitivity:", style='DisplayL.TLabel')
+        self.senScolbl.grid(row=1, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.senScolbl)
+
+        self.speScolbl = ttk.Label(self.pagedis[3], text="Specificity:", style='DisplayL.TLabel')
+        self.speScolbl.grid(row=2, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.speScolbl)
+
+        self.posScolbl = ttk.Label(self.pagedis[3], text="Positive Predictive:", style='DisplayL.TLabel')
+        self.posScolbl.grid(row=3, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.posScolbl)
+
+        self.negScolbl = ttk.Label(self.pagedis[3], text="Negative Predictive:", style='DisplayL.TLabel')
+        self.negScolbl.grid(row=4, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.negScolbl)
+
+        self.perScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.perScosep.grid(row=5, column=0, columnspan=2, sticky=E+W, pady=5, padx=10)
+
+        self.perScolbl = ttk.Label(self.pagedis[3], text="Overall Performance:", style='DisplayL.TLabel')
+        self.perScolbl.grid(row=6, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.perScolbl)
 
         self.varSensitivity = tk.DoubleVar()
         self.varSpecificity = tk.DoubleVar()
@@ -418,58 +541,28 @@ class EEG_GUI():
 
         self.varPerformance.trace('w', self.updatescore)
 
-        self.senScoval = ttk.Label(self.pagectr[2], text='0', style='ControlsL.TLabel')
-        self.senScoval.grid(row=10, column=1, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.senScoval)
+        self.senScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.senScoval.grid(row=1, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.senScoval)
 
-        self.speScoval = ttk.Label(self.pagectr[2], text='0', style='ControlsL.TLabel')
-        self.speScoval.grid(row=11, column=1, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.speScoval)
+        self.speScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.speScoval.grid(row=2, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.speScoval)
 
-        self.posScoval = ttk.Label(self.pagectr[2], text='0', style='ControlsL.TLabel')
-        self.posScoval.grid(row=12, column=1, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.posScoval)
+        self.posScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.posScoval.grid(row=3, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.posScoval)
 
-        self.negScoval = ttk.Label(self.pagectr[2], text='0', style='ControlsL.TLabel')
-        self.negScoval.grid(row=13, column=1, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.negScoval)
+        self.negScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.negScoval.grid(row=4, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.negScoval)
 
-        self.perScoval = ttk.Label(self.pagectr[2], text='0', style='ControlsL.TLabel')
-        self.perScoval.grid(row=14, column=1, sticky=W, pady=1, padx=1)
-        self.allLabels['ControlsL.TLabel'].append(self.perScoval)
+        self.perScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.perScoval.grid(row=6, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.perScoval)
 
-        self.endsep2 = ttk.Separator(self.pagectr[2], style='Controls.TSeparator')
-        self.endsep2.grid(row=15, column=0, columnspan=2, sticky=E+W, pady=5, padx=5)
-
-        # Page 2 - Train Classifier Display
-        for i, w in enumerate([0, 0, 1]):
-            self.pagedis[2].grid_columnconfigure(i, weight=w)
-        for i, w in enumerate([0, 1]):
-            self.pagedis[2].grid_rowconfigure(i, weight=w)
-
-        self.claRessep = ttk.Separator(self.pagedis[2], style='Display.TSeparator')
-        self.claRessep.grid(row=0, column=0, columnspan=3, sticky=E+W, pady=5, padx=200)
-        self.claReslbl = ttk.Label(self.pagedis[2], text="Classifier Results", style='Display.TLabel')
-        self.claReslbl.grid(row=0, column=0, columnspan=3,  pady=5, padx=5)
-        self.allLabels['Display.TLabel'].append(self.claReslbl)
-
-        self.tstCSVtxt = tk.Text(self.pagedis[2])
-        self.tstCSVtxt.grid(row=1, column=2, rowspan=2, sticky=N+E+W+S, pady=10, padx=10)
-        self.includelist = tk.StringVar()
-        self.excludelist = tk.StringVar()
-        self.tstInclst = tk.Listbox(self.pagedis[2], selectmode='extended', listvariable=self.includelist)
-        self.tstInclst.grid(row=1, column=0, sticky=N+S, pady=10, padx=10)
-        self.tstExclst = tk.Listbox(self.pagedis[2], listvariable=self.excludelist)
-        self.tstExclst.grid(row=1, column=1, sticky=N+S, pady=10, padx=10)
-
-        self.tstExcbtn = ttk.Button(self.pagedis[2], text="Exclude", command=self.exclude)
-        self.tstExcbtn.grid(row=2, column=0, pady=5, padx=5)
-        self.allLabels['TButton'].append(self.tstExcbtn)
-
-        self.tstClrbtn = ttk.Button(self.pagedis[2], text="Reset", command=self.clear)
-        self.tstClrbtn.grid(row=2, column=1, pady=5, padx=5)
-        self.allLabels['TButton'].append(self.tstClrbtn)
-
+        self.tstCSVtxt = tk.Text(self.pagedis[3])
+        self.tstCSVtxt.grid(row=1, column=2, rowspan=8, sticky=N+E+W+S, pady=10, padx=10)
 
         # Page 4
         # self.traCSVtxt = tk.Text(self.page[4])
@@ -479,8 +572,9 @@ class EEG_GUI():
         # Test Parameter Flags (Make these into Widgets)
         self.useMark = False
         self.useFeatures = True
-
-        self.p = 0
+        self.printFeatures = False
+        if self.printFeatures:
+            self.p = 0
 
         # File Variables
         self.filename = ''
@@ -489,8 +583,11 @@ class EEG_GUI():
         self.trainheading = []
         if self.useFeatures:
             for sensor in ['1', '2', '3', '4']:
-                for feat in range(1, 13):
-                    self.trainheading.append('Sen{}F{}'.format(sensor, feat))
+                for feat in ['delta', 'theta', 'alpha', 'beta', 'gamma', 'phi',
+                             'theta/beta', 'theta/alpha', 'theta/phi',
+                             'theta/(beta + alpha + gamma)', 'delta/(beta + alpha + gamma)',
+                             'delta/alpha', 'delta/phi', 'delta/beta', 'delta/theta', '(theta + alpha)/beta']:
+                    self.trainheading.append('Sen{}-{}'.format(sensor, feat))
         else:
             self.trainheading = np.linspace(0.0, 250 / 2, 1000 // 2 + 1).tolist()
         self.trainheading.append('Class')
@@ -600,6 +697,18 @@ class EEG_GUI():
         self.filLowval.config(text=self.varLowCut.get()/2)
 
     # -------------------------------------------------------------------------
+    # updateduration
+    #
+    # Description:
+    #       This method sets the lower limit for the higher cut-off frequency.
+    #
+    # -------------------------------------------------------------------------
+    def updateduration(self, *args):
+        self.varWindow.set(int(self.varWindow.get()))
+        self.filDurval.config(text="{} s".format(self.varWindow.get()))
+        self.filHigsld.config(from_=self.varLowCut.get())
+        self.filLowval.config(text=self.varLowCut.get()/2)
+    # -------------------------------------------------------------------------
     # updateSens
     #
     # Description:
@@ -640,19 +749,34 @@ class EEG_GUI():
         self.getBands()
 
     # -------------------------------------------------------------------------
-    # clear
+    # addfeat
     #
     # Description:
     #       This method resets the columns that the user previously excluded.
     #
     # -------------------------------------------------------------------------
-    def clear(self):
+    def addfeat(self):
         self.tstInclst.delete(0, END)
         self.tstExclst.delete(0, END)
 
         for column in self.trainheading:
             self.tstInclst.insert(END, column)
         self.tstInclst.delete(END)
+
+    # -------------------------------------------------------------------------
+    # removefeat
+    #
+    # Description:
+    #       This method resets the columns that the user previously excluded.
+    #
+    # -------------------------------------------------------------------------
+    def removefeat(self):
+        self.tstInclst.delete(0, END)
+        self.tstExclst.delete(0, END)
+
+        for column in self.trainheading:
+            self.tstExclst.insert(END, column)
+        self.tstExclst.delete(END)
 
     # -------------------------------------------------------------------------
     # exclude
@@ -672,6 +796,35 @@ class EEG_GUI():
         for item in sort:
             self.tstExclst.insert(END, item)
 
+        self.selXaxmnu['menu'].delete(0, 'end')
+        self.selYaxmnu['menu'].delete(0, 'end')
+        for item in self.tstInclst.get(0, END):
+            self.selXaxmnu['menu'].add_command(label=item, command=lambda x=item: self.varXax.set(x))
+            self.selYaxmnu['menu'].add_command(label=item, command=lambda x=item: self.varYax.set(x))
+
+    # -------------------------------------------------------------------------
+    # include
+    #
+    # Description:
+    #       This method includes features to be used based on user selection.
+    #
+    # -------------------------------------------------------------------------
+    def include(self):
+        list = sorted(self.tstExclst.curselection(), reverse=True)
+        for item in list:
+            self.tstInclst.insert(END, self.tstExclst.get(item))
+            self.tstExclst.delete(item)
+
+        sort = sorted(self.tstInclst.get(0, END))
+        self.tstInclst.delete(0, END)
+        for item in sort:
+            self.tstInclst.insert(END, item)
+
+        self.selXaxmnu['menu'].delete(0, 'end')
+        self.selYaxmnu['menu'].delete(0, 'end')
+        for item in self.tstInclst.get(0, END):
+            self.selXaxmnu['menu'].add_command(label=item, command=lambda x=item: self.varXax.set(x))
+            self.selYaxmnu['menu'].add_command(label=item, command=lambda x=item: self.varYax.set(x))
 
     # -------------------------------------------------------------------------
     # getcsv
@@ -683,28 +836,29 @@ class EEG_GUI():
     def getcsv(self, test):
         # Select the training data folder
         self.folder = filedialog.askdirectory(title="Select the Folder with the {}ing Data".format(test))
-
-        if test == "Test":
+        self.folderout = ""
+        if test == "Test" and self.printFeatures:
             # Select the output folder
             self.folderout = filedialog.askdirectory(title="Select an Output Folder")
         if test == "Train":
-            self.clear()
+            self.trainlist = []
+            self.addfeat()
 
         self.filelist = iter(sorted(os.listdir(self.folder)))
         self.bar.grid()
         self.bar.config(maximum=len(os.listdir(self.folder)), value=0)
         self.testing = test
 
-        self.master.after(100, self.collectcsv)
+        self.master.after(10, self.collectcsv)
 
         # Prepare the Training Data
 
     def collectcsv(self):
         self.file = next(self.filelist, "end")
-        self.bar.step()
-        self.bar.update_idletasks()
-        self.mainpage.update_idletasks()
         if self.file != "end":
+            self.bar.step()
+            self.bar.update_idletasks()
+            self.mainpage.update_idletasks()
             self.filename = "{}/{}".format(self.folder, self.file)
 
             # Read the file into a pandas data frame
@@ -719,7 +873,9 @@ class EEG_GUI():
             # Test the Data
             if self.testing == "Test":
                 self.test(self.folderout)
-            self.master.after(100, self.collectcsv)
+            self.master.after(10, self.collectcsv)
+        else:
+            self.bar.grid_remove()
 
     # -------------------------------------------------------------------------
     # switchDomain
@@ -751,7 +907,7 @@ class EEG_GUI():
     # -------------------------------------------------------------------------
     def preprocess(self, test):
         fs = 250
-        window = 4
+        window = self.varWindow.get()
 
         # Change the 20 into a variable
         if self.useMark:
@@ -912,6 +1068,23 @@ class EEG_GUI():
         self.fig2.canvas.draw()
 
     # -------------------------------------------------------------------------
+    # plotFeature
+    #
+    # Description:
+    #       This method draws the EEG data.
+    #
+    # -------------------------------------------------------------------------
+    def plotFeature(self, *args):
+        self.axs3.cla()
+        x = self.varXax.get()
+        y = self.varYax.get()
+        if x in self.traindf.columns and y in self.traindf.columns:
+            self.traindf.loc[self.traindf['Class'] == "Fatigued"].plot.scatter(x=x, y=y, c='red', ax=self.axs3, s=0.2)
+            self.traindf.loc[self.traindf['Class'] == "Not Fatigued"].plot.scatter(x=x, y=y, c='blue', ax=self.axs3,
+                                                                                   s=0.2)
+            self.fig3.canvas.draw()
+
+    # -------------------------------------------------------------------------
     # plotMarker
     #
     # Description:
@@ -919,9 +1092,9 @@ class EEG_GUI():
     #
     # -------------------------------------------------------------------------
     def plotMarker(self, *args):
-        self.axs3.cla()
+        self.axs4.cla()
         df = self.eegdf.loc[self.eegdf['Marker'] == self.varMrk.get()]
-        df[['Time', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].plot(kind='line', x='Time', legend=False, ax=self.axs3)
+        df[['Time', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].plot(kind='line', x='Time', legend=False, ax=self.axs4)
 
     # -------------------------------------------------------------------------
     # extractFeatures
@@ -961,11 +1134,14 @@ class EEG_GUI():
                 beta = meanlist[mean['beta']]
                 gamma = meanlist[mean['gamma']]
                 phi = meanlist[mean['phi']]
-                if (delta * theta * alpha * beta * gamma * phi) == 0:
-                    return
+                # if (theta * alpha * beta * phi) == 0:
+                    # return
                 feat.append(delta)
                 feat.append(theta)
                 feat.append(alpha)
+                feat.append(beta)
+                feat.append(gamma)
+                feat.append(phi)
                 feat.append(theta/beta)
                 feat.append(theta/alpha)
                 feat.append(theta/phi)
@@ -975,6 +1151,7 @@ class EEG_GUI():
                 feat.append(delta/phi)
                 feat.append(delta/beta)
                 feat.append(delta/theta)
+                feat.append((theta + alpha)/beta)
         else:
             feat = freqdf.sum(axis=1).tolist()
             # feat = freqdf[['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']].sum(axis=1).tolist()
@@ -1024,10 +1201,10 @@ class EEG_GUI():
     #
     # -------------------------------------------------------------------------
     def test(self, folderout):
-
-        self.workbook = xlsxwriter.Workbook('{}/Experiment{}_{}.xlsx'.format(folderout, self.p, self.file))
-        self.worksheet = self.workbook.add_worksheet()
-        self.p += 1
+        if self.printFeatures == True:
+            self.workbook = xlsxwriter.Workbook('{}/Experiment{}_{}.xlsx'.format(folderout, self.p, self.file))
+            self.worksheet = self.workbook.add_worksheet()
+            self.p += 1
         self.testdf = pd.DataFrame(self.testlist, columns=self.trainheading)
         self.testdf = self.testdf.dropna()
         # X = self.testdf.loc[:, self.testdf.columns != 'Class'].copy()
@@ -1047,25 +1224,26 @@ class EEG_GUI():
             self.totalfatigue += self.testdf.shape[0]
             self.correctfatigue += self.testdf.shape[0]*score
 
-
-
         self.tstCSVtxt.insert(INSERT, scoretxt)
         self.tstCSVtxt.update_idletasks()
-        y = self.clf.predict(X)
-        self.testdf["Class"] = y
 
-        for i, header in enumerate(self.trainheading):
-            self.worksheet.write(0, i, header)
-        for row, data in self.testdf.iterrows():
-            for col, columnname in enumerate(self.testdf):
-                self.worksheet.write(row, col, self.testdf.loc[row, columnname])
-                col += 1
-            row += 1
+        if self.printFeatures:
+            y = self.clf.predict(X)
+            self.testdf["Class"] = y
 
-        prediction = "AW" if self.useFeatures else "SG"
-        self.worksheet.write(0, col, "=COUNTIF({}:{},\"Fatigued\")".format(prediction, prediction))
-        self.worksheet.write(1, col, "=COUNTA({}:{})".format(prediction, prediction))
-        self.workbook.close()
+            for i, header in enumerate(self.trainheading):
+                self.worksheet.write(0, i, header)
+            for row, data in self.testdf.iterrows():
+                for col, columnname in enumerate(self.testdf):
+                    self.worksheet.write(row, col, self.testdf.loc[row, columnname])
+                    col += 1
+                row += 1
+
+            prediction = "AW" if self.useFeatures else "SG"
+            self.worksheet.write(0, col, "=COUNTIF({}:{},\"Fatigued\")".format(prediction, prediction))
+            self.worksheet.write(1, col, "=COUNTA({}:{})".format(prediction, prediction))
+            self.workbook.close()
+
         self.testdf = self.testdf.iloc[0:0]
         self.testlist = []
         self.m = 0
@@ -1081,7 +1259,7 @@ class EEG_GUI():
             self.varPositivePred.set(pospred)
             self.varNegativePred.set(negpred)
 
-            self.varPerformance.set(sensitivity * specificity * pospred * negpred)
+            self.varPerformance.set((sensitivity * specificity)**(1/2))
 
 
     # -------------------------------------------------------------------------
@@ -1097,8 +1275,8 @@ class EEG_GUI():
 
 if __name__ == "__main__":
     # Profiler Start
-    pr = cProfile.Profile()
-    pr.enable()
+    # pr = cProfile.Profile()
+    # pr.enable()
 
     root = tk.Tk()
     game = EEG_GUI(master=root)
@@ -1106,11 +1284,11 @@ if __name__ == "__main__":
     root.quit()
 
     # Profiler End
-    pr.disable()
-    s = io.StringIO()
-    sortby = SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_callees(.05)
-    print(s.getvalue())
+    # pr.disable()
+    # s = io.StringIO()
+    # sortby = SortKey.CUMULATIVE
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_callees(.05)
+    # print(s.getvalue())
     tk.sys.exit(0)
 
