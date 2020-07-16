@@ -1,7 +1,7 @@
 # |ECE 499: Classifier|--------------------------------------------------------
 #
 # Project: Brain Assessment for Mental Fatigue
-# Program: Machine Learning Classifier (v1.200522)
+# Program: Machine Learning Classifier (v1.200712)
 #
 # Description:
 #      This Application is used to train the classifier for the
@@ -27,42 +27,38 @@
 # v1.200606 - IR
 #    - Added Font Changer
 #    - Modified the GUI
+# v1.200712 - IR
+#    - Major Changes
 # -----------------------------------------------------------------------------
 
 # |MODULES|--------------------------------------------------------------------
-import sys
-import tkinter as tk
-from tkinter import N, E, W, S, filedialog, font, INSERT, END, GROOVE, SUNKEN, FLAT, RAISED, RIDGE
-import tkinter.ttk as ttk
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from scipy import signal, fftpack
-import numpy as np
-from sklearn.svm import SVC
-import xlsxwriter
+import cProfile
+import io
 import os
+import pstats
+import sys
+
 import itertools as it
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import tkinter as tk
+import tkinter.ttk as ttk
+import xlsxwriter
 
-# import cProfile, pstats, io
-# from pstats import SortKey
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from pstats import SortKey
+from scipy import signal, fftpack
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import GridSearchCV, PredefinedSplit
+from sklearn.svm import SVC
+from tkinter import N, E, W, S, filedialog, font, INSERT, END, RIDGE
 
 
-class EEG_GUI():
+class EegGui:
     def __init__(self, master=None):
-        # Colors
-        uvicblue = '#005493'
-        uvicdarkblue = '#002754'
-        uvicyellow = '#F5AA1C'
-        uvicred = '#C63527'
-        fadeyellow = '#F8C15A'
-        darkgrey = '#414141'
-
-        # Ttk Style Settings
+        # Initialize ttk Style
         self.style = ttk.Style()
-        self.style.theme_use('default')
-        # Available Themes 'winnative', 'clam', 'alt', 'default', 'classic', 'vista', 'xpnative'
-
         # Ttk Style Label Settings
         self.allLabels = {'Main.TLabel': [],
                           'Controls.TLabel': [],
@@ -78,57 +74,9 @@ class EEG_GUI():
                            'Heading': ['Arial', 14, 'bold'],
                            'Label': ['Arial', 12, ''],
                            'Button': ['Arial', 12, 'bold']}
+        self.initstyle()
 
-        self.style.configure('Main.TLabel', foreground=uvicyellow, background=darkgrey, padding=[10, 10],
-                             font=self.fontpreset['Title'])
-        self.style.configure('Controls.TLabel', foreground=uvicyellow, background=uvicdarkblue, padding=[10, 10],
-                             font=self.fontpreset['Heading'])
-        self.style.configure('Display.TLabel', foreground=uvicdarkblue, background=fadeyellow, padding=[10, 10],
-                             font=self.fontpreset['Heading'])
-        self.style.configure('ControlsL.TLabel', foreground=uvicyellow, background=uvicdarkblue, padding=[5, 5],
-                             font=self.fontpreset['Label'])
-        self.style.configure('DisplayL.TLabel', foreground=uvicdarkblue, background=fadeyellow, padding=[5, 5],
-                             font=self.fontpreset['Button'])
-
-        # Ttk Style Separator Settings
-        self.style.configure('Main.TSeparator', background=uvicyellow)
-        self.style.configure('Controls.TSeparator', background=uvicyellow)
-        self.style.configure('Display.TSeparator', background=uvicdarkblue)
-
-        # Ttk Style Notebook Settings
-        self.style.map('Main.TNotebook.Tab',
-                       background=[('selected', uvicdarkblue),
-                                   ('active', uvicblue)],
-                       focuscolor=[('selected', uvicdarkblue),
-                                   ('active', uvicblue)])
-        self.style.configure('Main.TNotebook.Tab', font=self.fontpreset['Tab'], expand=[-2, 0, -2, 0], width=20,
-                             padding=[10, 10], foreground=uvicyellow, background=darkgrey, focuscolor=darkgrey)
-        self.style.configure('Main.TNotebook', tabmargins=[-6, 0, -6, 0], tabposition='wn', borderwidth=0, padding=[0],
-                             background=darkgrey, lightcolor=darkgrey, darkcolor=darkgrey)
-
-        # Ttk Style Frame Settings
-        self.style.configure('TFrame', padding=[5, 5])
-        self.style.configure('Main.TFrame', background=darkgrey, padding=[5, 5])
-        self.style.configure('Page.TFrame', background=uvicdarkblue, bordercolor=darkgrey,
-                             borderwidth=5, padding=[5, 5])
-        self.style.configure('Controls.TFrame', background=uvicdarkblue, bordercolor=darkgrey,
-                             borderwidth=5, padding=[5, 5])
-        self.style.configure('Display.TFrame', background=fadeyellow, bordercolor=darkgrey,
-                             borderwidth=5, relief=RIDGE, padding=[5, 5])
-
-        # Ttk Style Widgets Settings
-        self.style.map('TScale', background=[('active', uvicred)])
-        self.style.configure('TScale', background=uvicyellow, troughcolor=uvicblue)
-        self.style.map('TButton', background=[('active', uvicred)])
-        self.style.configure('TButton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue, font=self.fontpreset['Button'], width=15)
-        self.style.map('TMenubutton', background=[('active', uvicred)])
-        self.style.configure('TMenubutton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue, font=self.fontpreset['Button'], width=10)
-        self.style.configure('TProgressbar', background=uvicyellow, troughcolor=uvicblue)
-
-        # Matplotlib.Pyplot Settings
-        plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.9, wspace=0, hspace=0)
-
-        # Window Settings
+        # Initialize the Main Window
         self.master = master
         self.master.protocol("WM_DELETE_WINDOW", self.master.quit)  # handle event when window is closed by user
         self.master.bind("<Escape>", self.onClose)  # Bind: Press Escape to Close Application
@@ -161,7 +109,9 @@ class EEG_GUI():
         self.pageTitle = ["View Data",
                           "Feature Plots",
                           "Marked Data",
-                          "Train Classifier"]
+                          "Train Classifier",
+                          "Histogram"]
+
         self.page = []
         self.pagectr = []
         self.pagedis = []
@@ -261,17 +211,19 @@ class EEG_GUI():
         self.allLabels['Display.TLabel'].append(self.disTimlbl)
 
         self.y1 = []
+        self.ys1 = None
         self.fig1, self.axs1 = plt.subplots(1, 1)
         plt.tight_layout(pad=2)
-        self.fig1.patch.set_facecolor(fadeyellow)
+        self.fig1.patch.set_facecolor('#F8C15A')
 
         self.eegline = FigureCanvasTkAgg(self.fig1, self.pagedis[0])
         self.eegline.get_tk_widget().grid(row=1, column=0, sticky=N+E+W+S, pady=5, padx=5)
 
         self.y2 = []
+        self.ys2 = None
         self.fig2, self.axs2 = plt.subplots(1, 1)
         plt.tight_layout(pad=2)
-        self.fig2.patch.set_facecolor(fadeyellow)
+        self.fig2.patch.set_facecolor('#F8C15A')
 
         self.eegfft = FigureCanvasTkAgg(self.fig2, self.pagedis[0])
         self.eegfft.get_tk_widget().grid(row=1, column=0, sticky=N+E+W+S, pady=5, padx=5)
@@ -294,10 +246,8 @@ class EEG_GUI():
         self.allLabels['Controls.TLabel'].append(self.selMrklbl)
 
         self.varXax = tk.StringVar()
-        #self.varXax.set(None)
         self.varXax.trace('w', self.plotFeature)
         self.varYax = tk.StringVar()
-        #self.varYax.set(0)
         self.varYax.trace('w', self.plotFeature)
         self.mnuXaxlbl = ttk.Label(self.pagectr[1], text='X-Axis', style='ControlsL.TLabel')
         self.mnuXaxlbl.grid(row=1, column=0, sticky=E, pady=5, padx=5)
@@ -331,7 +281,7 @@ class EEG_GUI():
         plt.tight_layout(pad=2)
         featplt = FigureCanvasTkAgg(self.fig3, self.pagedis[1])
         featplt.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
-        self.fig3.patch.set_facecolor(fadeyellow)
+        self.fig3.patch.set_facecolor('#F8C15A')
 
         # Page 2 - Marked Data Control
         for i, w in enumerate([0, 1]):
@@ -375,7 +325,7 @@ class EEG_GUI():
         plt.tight_layout(pad=2)
         markplt = FigureCanvasTkAgg(self.fig4, self.pagedis[2])
         markplt.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
-        self.fig4.patch.set_facecolor(fadeyellow)
+        self.fig4.patch.set_facecolor('#F8C15A')
 
         # Page 3 - Train Classifier Controls
         for i, w in enumerate([1]):
@@ -390,71 +340,75 @@ class EEG_GUI():
         self.modConlbl.grid(row=0, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['Controls.TLabel'].append(self.modConlbl)
 
-        self.selDatbtn = ttk.Button(self.pagectr[3], text="Select Data", command=lambda x="Train": self.getcsv(x))
-        self.selDatbtn.grid(row=1, column=0, columnspan=3, pady=5, padx=5)
-        self.allLabels['TButton'].append(self.selDatbtn)
+        self.selTrabtn = ttk.Button(self.pagectr[3], text="Select Train", command=lambda x="Train": self.getcsv(x))
+        self.selTrabtn.grid(row=1, column=0, columnspan=3, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.selTrabtn)
+
+        self.selTesbtn = ttk.Button(self.pagectr[3], text="Select Test", command=lambda x="Test": self.getcsv(x))
+        self.selTesbtn.grid(row=2, column=0, columnspan=3, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.selTesbtn)
 
         self.traModbtn = ttk.Button(self.pagectr[3], text="Train Model", command=self.train)
-        self.traModbtn.grid(row=2, column=0, columnspan=3, pady=5, padx=5)
+        self.traModbtn.grid(row=3, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.traModbtn)
 
-        self.tstModbtn = ttk.Button(self.pagectr[3], text="Test Model", command=lambda x="Test": self.getcsv(x))
-        self.tstModbtn.grid(row=3, column=0, columnspan=3, pady=5, padx=5)
+        self.tstModbtn = ttk.Button(self.pagectr[3], text="Test Model", command=self.test)
+        self.tstModbtn.grid(row=4, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstModbtn)
 
         self.filConsep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
-        self.filConsep.grid(row=4, column=0, columnspan=3, sticky=E + W, pady=5, padx=5)
+        self.filConsep.grid(row=5, column=0, columnspan=3, sticky=E + W, pady=5, padx=5)
 
         self.filConlbl = ttk.Label(self.pagectr[3], text='Filter Controls', style='Controls.TLabel')
-        self.filConlbl.grid(row=4, column=0, columnspan=3, pady=5, padx=5)
+        self.filConlbl.grid(row=5, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['Controls.TLabel'].append(self.filConlbl)
 
         self.filHiglbl = ttk.Label(self.pagectr[3], text="High:", style='ControlsL.TLabel')
-        self.filHiglbl.grid(row=5, column=0, sticky=E, pady=2, padx=0)
+        self.filHiglbl.grid(row=6, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filHiglbl)
 
         self.filLowlbl = ttk.Label(self.pagectr[3], text="Low:", style='ControlsL.TLabel')
-        self.filLowlbl.grid(row=6, column=0, sticky=E, pady=2, padx=0)
+        self.filLowlbl.grid(row=7, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filLowlbl)
 
         self.filDurlbl = ttk.Label(self.pagectr[3], text="Duration:", style='ControlsL.TLabel')
-        self.filDurlbl.grid(row=7, column=0, sticky=E, pady=2, padx=0)
+        self.filDurlbl.grid(row=8, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filDurlbl)
 
         self.varHighCut = tk.IntVar()
         self.varHighCut.set(249)
         self.varHighCut.trace('w', self.limitlower)
         self.filHigsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varHighCut, length=150)
-        self.filHigsld.grid(row=5, column=1, sticky=E + W)
+        self.filHigsld.grid(row=6, column=1, sticky=E + W)
 
         self.varLowCut = tk.IntVar()
         self.varLowCut.set(1)
         self.varLowCut.trace('w', self.limitupper)
         self.filLowsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varLowCut, length=150)
-        self.filLowsld.grid(row=6, column=1, sticky=E+W)
+        self.filLowsld.grid(row=7, column=1, sticky=E+W)
 
         self.varWindow = tk.IntVar()
         self.varWindow.set(4)
         self.varWindow.trace('w', self.updateduration)
         self.filWinsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varWindow, length=150)
-        self.filWinsld.grid(row=7, column=1, sticky=E+W)
+        self.filWinsld.grid(row=8, column=1, sticky=E+W)
 
         self.filHigval = ttk.Label(self.pagectr[3], text='124.5', style='ControlsL.TLabel')
-        self.filHigval.grid(row=5, column=2, sticky=W, pady=2, padx=2)
+        self.filHigval.grid(row=6, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filHigval)
         self.filLowval = ttk.Label(self.pagectr[3], text='0.5', style='ControlsL.TLabel')
-        self.filLowval.grid(row=6, column=2, sticky=W, pady=2, padx=2)
+        self.filLowval.grid(row=7, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filLowval)
 
         self.filDurval = ttk.Label(self.pagectr[3], text='4.0 s', style='ControlsL.TLabel')
-        self.filDurval.grid(row=7, column=2, sticky=W, pady=2, padx=2)
+        self.filDurval.grid(row=8, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filDurval)
 
         self.endsep3 = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
-        self.endsep3.grid(row=8, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
+        self.endsep3.grid(row=9, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
 
         self.bar = ttk.Progressbar(self.pagectr[3])
-        self.bar.grid(row=8, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
+        self.bar.grid(row=9, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
         self.bar.grid_remove()
 
         self.modFeasep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
@@ -564,52 +518,162 @@ class EEG_GUI():
         self.tstCSVtxt = tk.Text(self.pagedis[3])
         self.tstCSVtxt.grid(row=1, column=2, rowspan=8, sticky=N+E+W+S, pady=10, padx=10)
 
-        # Page 4
-        # self.traCSVtxt = tk.Text(self.page[4])
-        # self.traCSVtxt.grid(row=2, column=0, sticky=N+E+W+S, pady=10, padx=10)
+        # Page 4 - Histogram
+        for i, w in enumerate([0]):
+            self.pagectr[4].grid_columnconfigure(i, weight=w)
+        for i, w in enumerate([0, 0, 1]):
+            self.pagectr[4].grid_rowconfigure(i, weight=w)
 
+        self.hisctrsep = ttk.Separator(self.pagectr[4], style='Controls.TSeparator')
+        self.hisctrsep.grid(row=0, column=0, sticky=E+W, pady=5, padx=5)
 
-        # Test Parameter Flags (Make these into Widgets)
+        self.hisctrlbl = ttk.Label(self.pagectr[4], text='No Controls', style='Controls.TLabel')
+        self.hisctrlbl.grid(row=0, column=0, pady=5, padx=5)
+        self.allLabels['Controls.TLabel'].append(self.hisctrlbl)
+
+        self.endsep4 = ttk.Separator(self.pagectr[4], style='Controls.TSeparator')
+        self.endsep4.grid(row=1, column=0, sticky=E+W, pady=5, padx=5)
+
+        # Page 4 - Histogram
+        for i, w in enumerate([1]):
+            self.pagedis[4].grid_columnconfigure(i, weight=w)
+        for i, w in enumerate([0, 1]):
+            self.pagedis[4].grid_rowconfigure(i, weight=w)
+        self.hisPlosep = ttk.Separator(self.pagedis[4], style='Display.TSeparator')
+        self.hisPlosep.grid(row=0, column=0, sticky=E+W, pady=5, padx=50)
+
+        self.hisPlolbl = ttk.Label(self.pagedis[4], text='Histogram Plot', style='Display.TLabel')
+        self.hisPlolbl.grid(row=0, column=0, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.hisPlolbl)
+
+        self.fig5, self.axs5 = plt.subplots(1, 1)
+        plt.tight_layout(pad=2)
+        hisplt = FigureCanvasTkAgg(self.fig5, self.pagedis[4])
+        hisplt.get_tk_widget().grid(row=1, sticky=N+E+W+S, pady=10, padx=10)
+        self.fig5.patch.set_facecolor('#F8C15A')
+
+        # List of Fonts
+        self.fontlist = it.cycle(sorted(font.families()))
+
+        # Test Parameter Flags
         self.useMark = False
-        self.useFeatures = True
         self.printFeatures = False
+        self.testing = ''
         if self.printFeatures:
             self.p = 0
 
         # File Variables
-        self.filename = ''
         self.file = ''
+        self.filename = ''
+        self.filenumber = 0
+
+        # Pre-processing DataFrames
         self.eegdf = pd.DataFrame()
-        self.trainheading = []
-        if self.useFeatures:
-            for sensor in ['1', '2', '3', '4']:
-                for feat in ['delta', 'theta', 'alpha', 'beta', 'gamma', 'phi',
-                             'theta/beta', 'theta/alpha', 'theta/phi',
-                             'theta/(beta + alpha + gamma)', 'delta/(beta + alpha + gamma)',
-                             'delta/alpha', 'delta/phi', 'delta/beta', 'delta/theta', '(theta + alpha)/beta']:
-                    self.trainheading.append('Sen{}-{}'.format(sensor, feat))
-        else:
-            self.trainheading = np.linspace(0.0, 250 / 2, 1000 // 2 + 1).tolist()
-        self.trainheading.append('Class')
-        self.traindf = pd.DataFrame(columns=self.trainheading)
-        self.testdf = pd.DataFrame(columns=self.trainheading)
-        self.trainlist = []
-        self.testlist = []
         fftheading = ['Freq', 'EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']
         self.fftdf = pd.DataFrame(columns=fftheading)
-        # self.fatiguedf = pd.DataFrame(columns=fftheading)
-        # self.freshdf = pd.DataFrame(columns=fftheading)
-        self.fontlist = it.cycle(sorted(font.families()))
 
+        # Features Extraction
+        self.trainheading = []
+        for sensor in ['1', '2', '3', '4']:
+            for feat in ['delta', 'theta', 'alpha', 'beta', 'gamma', 'phi',
+                         'theta/beta', 'theta/alpha', 'theta/phi',
+                         'theta/(beta + alpha + gamma)', 'delta/(beta + alpha + gamma)',
+                         'delta/alpha', 'delta/phi', 'delta/beta', 'delta/theta', '(theta + alpha)/beta']:
+                self.trainheading.append('Sen{}-{}'.format(sensor, feat))
+        self.trainheading.append('Class')
+        self.trainheading.append('File')
+
+        self.traindf = pd.DataFrame(columns=self.trainheading)
+        self.testdf = pd.DataFrame(columns=self.trainheading)
+
+        self.trainlist = []
+        self.testlist = []
+
+        self.X = None
+        self.clf = None
+
+        # Evaluation
         self.totalfatigue = 0
         self.totalfresh = 0
         self.correctfatigue = 0
         self.correctfresh = 0
 
-        self.n = 0
-        self.m = 0
-
     # |METHODS|----------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # initStyle
+    #
+    # Description:
+    #       This method updates the ttk style object to modify the widgets.
+    #
+    # -------------------------------------------------------------------------
+    def initstyle(self):
+        # Colors
+        uvicblue = '#005493'
+        uvicdarkblue = '#002754'
+        uvicyellow = '#F5AA1C'
+        uvicred = '#C63527'
+        fadeyellow = '#F8C15A'
+        darkgrey = '#414141'
+
+        # Ttk Style Settings
+        self.style.theme_use('default')
+
+        # Ttk Label Settings
+        self.style.configure('Main.TLabel', foreground=uvicyellow, background=darkgrey, padding=[10, 10],
+                             font=self.fontpreset['Title'])
+        self.style.configure('Controls.TLabel', foreground=uvicyellow, background=uvicdarkblue, padding=[10, 10],
+                             font=self.fontpreset['Heading'])
+        self.style.configure('Display.TLabel', foreground=uvicdarkblue, background=fadeyellow, padding=[10, 10],
+                             font=self.fontpreset['Heading'])
+        self.style.configure('ControlsL.TLabel', foreground=uvicyellow, background=uvicdarkblue, padding=[5, 5],
+                             font=self.fontpreset['Label'])
+        self.style.configure('DisplayL.TLabel', foreground=uvicdarkblue, background=fadeyellow, padding=[5, 5],
+                             font=self.fontpreset['Button'])
+
+        # Ttk Style Separator Settings
+        self.style.configure('Main.TSeparator', background=uvicyellow)
+        self.style.configure('Controls.TSeparator', background=uvicyellow)
+        self.style.configure('Display.TSeparator', background=uvicdarkblue)
+
+        # Ttk Style Notebook Settings
+        self.style.map('Main.TNotebook.Tab',
+                       background=[('selected', uvicdarkblue),
+                                   ('active', uvicblue)],
+                       focuscolor=[('selected', uvicdarkblue),
+                                   ('active', uvicblue)])
+        self.style.configure('Main.TNotebook.Tab', font=self.fontpreset['Tab'], expand=[-2, 0, -2, 0], width=20,
+                             padding=[10, 10], foreground=uvicyellow, background=darkgrey, focuscolor=darkgrey)
+        self.style.configure('Main.TNotebook', tabmargins=[-6, 0, -6, 0], tabposition='wn', borderwidth=0, padding=[0],
+                             background=darkgrey, lightcolor=darkgrey, darkcolor=darkgrey)
+
+        # Ttk Style Frame Settings
+        self.style.configure('TFrame', padding=[5, 5])
+        self.style.configure('Main.TFrame', background=darkgrey, padding=[5, 5])
+        self.style.configure('Page.TFrame', background=uvicdarkblue, bordercolor=darkgrey,
+                             borderwidth=5, padding=[5, 5])
+        self.style.configure('Controls.TFrame', background=uvicdarkblue, bordercolor=darkgrey,
+                             borderwidth=5, padding=[5, 5])
+        self.style.configure('Display.TFrame', background=fadeyellow, bordercolor=darkgrey,
+                             borderwidth=5, relief=RIDGE, padding=[5, 5])
+
+        # Ttk Style Scale Settings
+        self.style.map('TScale', background=[('active', uvicred)])
+        self.style.configure('TScale', background=uvicyellow, troughcolor=uvicblue)
+
+        # Ttk Style Button Settings
+        self.style.map('TButton', background=[('active', uvicred)])
+        self.style.configure('TButton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue,
+                             font=self.fontpreset['Button'], width=15)
+        self.style.map('TMenubutton', background=[('active', uvicred)])
+        self.style.configure('TMenubutton', padding=[5, 5], background=uvicyellow, foreground=uvicdarkblue,
+                             font=self.fontpreset['Button'], width=10)
+
+        # Ttk Style Progressbar Settings
+        self.style.configure('TProgressbar', background=uvicyellow, troughcolor=uvicblue)
+
+        # Matplotlib.Pyplot Settings
+        plt.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.9, wspace=0, hspace=0)
+
     # -------------------------------------------------------------------------
     # switchplot
     #
@@ -628,7 +692,7 @@ class EEG_GUI():
         y1.plot(kind='line', x='Time', legend=True, ax=self.axs1, linewidth=0.2)
         self.axs1.set_title('Time Domain:{}'.format(self.file))
         self.axs1.set_xlabel('Time, [s]')
-        self.axs1.set_ylabel('EEG Signal, [Muse Units]')
+        self.axs1.set_ylabel('EEG Signal, [uV]')
         self.fig1.canvas.draw()
 
         # Frequency Domain Plot
@@ -637,7 +701,7 @@ class EEG_GUI():
         y2.plot(kind='line', x='Freqp', legend=True, ax=self.axs2, linewidth=0.2)
         self.axs2.set_title('Frequency Domain:{}'.format(self.file))
         self.axs2.set_xlabel('Frequency, [Hz]')
-        self.axs2.set_ylabel('EEG Amplitude, [Muse Units]')
+        self.axs2.set_ylabel('EEG Amplitude, [uV]')
         self.fig2.canvas.draw()
 
     # -------------------------------------------------------------------------
@@ -715,6 +779,7 @@ class EEG_GUI():
     #       This method updates the score displayed on the GUI.
     #
     # -------------------------------------------------------------------------
+
     def updatescore(self, *args):
         self.senScoval.config(text="{:.2f}%".format(self.varSensitivity.get()*100))
         self.speScoval.config(text="{:.2f}%".format(self.varSpecificity.get() * 100))
@@ -746,7 +811,7 @@ class EEG_GUI():
             self.selMrkmnu['menu'].add_command(label=mark, command=lambda x=mark: self.varMrk.set(x))
 
         # Process the raw data
-        self.getBands()
+        self.getbands()
 
     # -------------------------------------------------------------------------
     # addfeat
@@ -759,9 +824,8 @@ class EEG_GUI():
         self.tstInclst.delete(0, END)
         self.tstExclst.delete(0, END)
 
-        for column in self.trainheading:
+        for column in self.trainheading[:-2]:
             self.tstInclst.insert(END, column)
-        self.tstInclst.delete(END)
 
     # -------------------------------------------------------------------------
     # removefeat
@@ -774,9 +838,8 @@ class EEG_GUI():
         self.tstInclst.delete(0, END)
         self.tstExclst.delete(0, END)
 
-        for column in self.trainheading:
+        for column in self.trainheading[:-2]:
             self.tstExclst.insert(END, column)
-        self.tstExclst.delete(END)
 
     # -------------------------------------------------------------------------
     # exclude
@@ -867,15 +930,22 @@ class EEG_GUI():
             # Select the Desired Columns
             self.eegdf = rawdf[['Marker', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].copy()
 
-            # Prepare the Data
-            self.preprocess(self.testing)
+            # Prepare the
+            self.filenumber = int(''.join(c for c in self.file if c.isdigit()))
+            feats = self.preprocess()
+            if self.testing == "Train":
+                for feat in feats:
+                    self.trainlist.append(feat)
+            else:
+                for feat in feats:
+                    self.testlist.append(feat)
 
             # Test the Data
-            if self.testing == "Test":
-                self.test(self.folderout)
             self.master.after(10, self.collectcsv)
         else:
             self.bar.grid_remove()
+            # if self.testing == "Test":
+                # self.test()
 
     # -------------------------------------------------------------------------
     # switchDomain
@@ -905,31 +975,43 @@ class EEG_GUI():
     #       This method does all the pre-processing before extracting features.
     #
     # -------------------------------------------------------------------------
-    def preprocess(self, test):
+    def preprocess(self):
         fs = 250
         window = self.varWindow.get()
+        datalist = []
 
         # Change the 20 into a variable
         if self.useMark:
             self.eegdf = self.eegdf.loc[(self.eegdf['Marker'] < 20)].copy()
             self.eegdf.reset_index(inplace=True)
 
+        # Signal Pre-Processing
+        [b, a] = signal.butter(4, [self.varLowCut.get() / fs, self.varHighCut.get() / fs], btype='bandpass')
+        self.eegdf['Total'] = 0
+        # Place a band stop filter from 55 Hz to 60 Hz
+        for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+            self.eegdf[col] -= self.eegdf[col].mean()                       # Remove the mean offset (~800 Muse Units)
+            self.eegdf.loc[:, col] *= 1.64498                               # Convert into uV
+            self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])        # Apply the bandpass filter
+            self.eegdf['Total'] += abs(self.eegdf[col]) / 4                 # Record the Average Amplitude
+
+        # Remove High Amplitude Spikes
+        while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
+            self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
+            self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
+            for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+                self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
+                self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
+
+        self.eegdf.reset_index(inplace=True)
         size = self.eegdf.shape[0]
 
         # Add a time column 250 Hz
-        time = [1/fs * x for x in range(0, size)]
+        time = [1 / fs * x for x in range(0, size)]
         self.eegdf.insert(0, "Time", time)
 
-        # Place a band stop filter from 55 Hz to 60 Hz
-        for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-            self.eegdf[col] -= self.eegdf[col].mean()   # Remove the mean offset (~800 Muse Units)
-            self.eegdf.loc[:, col] *= 1.64498           # Convert into uV
-            b, a = signal.butter(4, [self.varLowCut.get()/fs, self.varHighCut.get()/fs], btype='bandpass')  # Dynamic Bandpass filterz to 60 Hz
-            self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
-            #b, a = signal.butter(4, 2 * 125 / fs)
-            #self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
-        if self.useFeatures:
-            self.fftdf['Freq'] = pd.Series(np.linspace(0.0, fs / 2, fs*window // 2 + 1))
+        # Prepare the Frequency Data Frame
+        self.fftdf['Freq'] = pd.Series(np.linspace(0.0, fs / 2, fs*window // 2 + 1))
 
         for i in range(0, int((1/fs*size)//1), window):
             df = self.eegdf.loc[(self.eegdf.Time >= i) & (self.eegdf.Time < (i + window))]
@@ -941,17 +1023,19 @@ class EEG_GUI():
                     fft[2:-2] = [2 * x for x in fft[2:-2]]
                     self.fftdf[col + 'fft'] = pd.Series(fft)
             if N:
-                self.extractFeatures(self.fftdf, test)
+                datalist.append(self.extractfeatures(self.fftdf))
+
+        return datalist
 
     # -------------------------------------------------------------------------
-    # getBands
+    # getbands
     #
     # Description:
     #       This method splits the data in the bands of interest. Before
     # calculating the next band, the lower frequency bands are subtracted.
     #
     # -------------------------------------------------------------------------
-    def getBands(self):
+    def getbands(self):
         fs = 250
         fband = [4, 8, 15, 32, 100]
         wband = [2 * x / fs for x in fband]
@@ -961,17 +1045,32 @@ class EEG_GUI():
             self.eegdf = self.eegdf[(self.eegdf['Marker'] < 20)].copy()
             self.eegdf.reset_index(inplace=True)
 
+        # Signal Pre-Processing
+        [b, a] = signal.butter(4, [self.varLowCut.get() / fs, self.varHighCut.get() / fs], btype='bandpass')
+        self.eegdf['Total'] = 0
+        for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+            self.eegdf[col] -= self.eegdf[col].mean()                       # Remove the mean offset (~800 Muse Units)
+            self.eegdf.loc[:, col] *= 1.64498                               # Convert into uV
+            self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])        # Apply the bandpass filter
+            self.eegdf['Total'] += abs(self.eegdf[col]) / 4                 # Record the Average Amplitude
+
+        # Remove High Amplitude Spikes
+        while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
+            self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
+            self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
+            for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+                self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
+                self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
+
+        self.eegdf.reset_index(inplace=True)
         size = self.eegdf.shape[0]
 
-        # Signal Pre-Processing (Replace band stop with bandpass of frequencies interest.
-        for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-            self.eegdf[col] -= self.eegdf[col].mean()      # Remove the mean offset (~800 Muse Units)
-            self.eegdf.loc[:, col] *= 1.64498              # Convert into uV
-            b, a = signal.butter(4, [self.varLowCut.get()/fs, self.varHighCut.get()/fs], btype='bandpass')  # Dynamic Bandpass filter
-            self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
-            #b, a = signal.butter(4, 2 * 125 / fs)
-            #self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
-
+        # Plot a Histogram of the Signal Amplitude
+        self.fig5.gca().hist(self.eegdf['Total'], bins=100, log=True)
+        self.axs5.set_title('Histogram'.format(self.file))
+        self.axs5.set_xlabel('Difference')
+        self.axs5.set_ylabel('Occurrences')
+        self.fig5.canvas.draw()
 
         # Add a time column 250 Hz
         time = [1/fs * x for x in range(0, size)]
@@ -982,47 +1081,47 @@ class EEG_GUI():
         self.varXoffset.set(self.eegdf["Time"].max()/2)
         self.varXwidth.set(self.eegdf["Time"].max())
 
+        b = [None] * 5
+        a = [None] * 5
+        for i, band in enumerate(wband):
+            [b[i], a[i]] = signal.butter(4, band)
+
         # Separate the desired bands into EEG Bands
         for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
             # First EEG Band Delta 0-4 Hz
-            b, a = signal.butter(4, wband[0])
             self.eegdf[col + 'Delta'] = self.eegdf[col]
-            self.eegdf[col + 'Delta'] = signal.filtfilt(b, a, self.eegdf[col+'Delta'])
+            self.eegdf[col + 'Delta'] = signal.filtfilt(b[0], a[0], self.eegdf[col+'Delta'])
 
             # Second EEG Band Theta 4-8 Hz
-            b, a = signal.butter(4, wband[1])
             self.eegdf[col + 'Theta'] = self.eegdf[col] \
                 .subtract(self.eegdf[col + 'Delta'])
-            self.eegdf[col + 'Theta'] = signal.filtfilt(b, a, self.eegdf[col+'Theta'])
+            self.eegdf[col + 'Theta'] = signal.filtfilt(b[1], a[1], self.eegdf[col+'Theta'])
 
             # Third EEG Band Alpha 8-15 Hz
-            b, a = signal.butter(4, wband[2])
             self.eegdf[col + 'Alpha'] = self.eegdf[col] \
                 .subtract(self.eegdf[col + 'Delta']) \
                 .subtract(self.eegdf[col + 'Theta'])
-            self.eegdf[col + 'Alpha'] = signal.filtfilt(b, a, self.eegdf[col+'Alpha'])
+            self.eegdf[col + 'Alpha'] = signal.filtfilt(b[2], a[2], self.eegdf[col+'Alpha'])
 
             # Fourth EEG Band Beta 15-32 Hz
-            b, a = signal.butter(4, wband[3])
             self.eegdf[col + 'Beta'] = self.eegdf[col] \
                 .subtract(self.eegdf[col + 'Delta']) \
                 .subtract(self.eegdf[col + 'Theta']) \
                 .subtract(self.eegdf[col + 'Alpha'])
-            self.eegdf[col + 'Beta'] = signal.filtfilt(b, a, self.eegdf[col+'Beta'])
+            self.eegdf[col + 'Beta'] = signal.filtfilt(b[3], a[3], self.eegdf[col+'Beta'])
 
             # Fifth EEG Band Gamma +32 Hz
-            b, a = signal.butter(4, wband[4])
             self.eegdf[col + 'Gamma'] = self.eegdf[col] \
                 .subtract(self.eegdf[col + 'Delta']) \
                 .subtract(self.eegdf[col + 'Theta']) \
                 .subtract(self.eegdf[col + 'Alpha']) \
                 .subtract(self.eegdf[col + 'Beta'])
-            self.eegdf[col + 'Gamma'] = signal.filtfilt(b, a, self.eegdf[col+'Gamma'])
+            self.eegdf[col + 'Gamma'] = signal.filtfilt(b[4], a[4], self.eegdf[col+'Gamma'])
 
         # Plot the Time Domain
         self.y1 = []
         for i, band in enumerate(['', 'Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']):
-            self.y1.append(self.eegdf[['Time', 'EEG1'+band, 'EEG2'+band, 'EEG3'+band, 'EEG4'+band]].copy())
+            self.y1.append(self.eegdf[['Time', 'EEG1'+band, 'EEG2'+band, 'EEG3'+band, 'EEG4'+band, 'Total']].copy())
 
         self.ys1 = it.cycle(self.y1)
 
@@ -1097,77 +1196,67 @@ class EEG_GUI():
         df[['Time', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].plot(kind='line', x='Time', legend=False, ax=self.axs4)
 
     # -------------------------------------------------------------------------
-    # extractFeatures
+    # extractfeatures
     #
     # Description:
     #       This method extracts features from the data.
     #
     # -------------------------------------------------------------------------
-    def extractFeatures(self, freqdf, test):
+    def extractfeatures(self, freqdf):
         # Holds the features for Machine Learning
         feat = []
-        if self.useFeatures:
-            deltadf = freqdf.loc[(freqdf['Freq'] >= 0) & (freqdf['Freq'] < 4)]
-            thetadf = freqdf.loc[(freqdf['Freq'] >= 4) & (freqdf['Freq'] < 8)]
-            alphadf = freqdf.loc[(freqdf['Freq'] >= 8) & (freqdf['Freq'] < 15)]
-            betadf = freqdf.loc[(freqdf['Freq'] >= 15) & (freqdf['Freq'] < 32)]
-            gammadf = freqdf.loc[(freqdf['Freq'] >= 32) & (freqdf['Freq'] < 100)]
 
-            mean = {
-                "delta": 0,
-                "theta": 1,
-                "alpha": 2,
-                "beta": 3,
-                "gamma": 4,
-                "phi": 5,
-            }
+        # Split the Dataframe by the EEG Bands
+        deltadf = freqdf.loc[(freqdf['Freq'] >= 0) & (freqdf['Freq'] < 4)]
+        thetadf = freqdf.loc[(freqdf['Freq'] >= 4) & (freqdf['Freq'] < 8)]
+        alphadf = freqdf.loc[(freqdf['Freq'] >= 8) & (freqdf['Freq'] < 15)]
+        betadf = freqdf.loc[(freqdf['Freq'] >= 15) & (freqdf['Freq'] < 32)]
+        gammadf = freqdf.loc[(freqdf['Freq'] >= 32) & (freqdf['Freq'] < 100)]
 
-            for i, sensor in enumerate(['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']):
-                meanlist = []
-                for df in [deltadf, thetadf, alphadf, betadf, gammadf]:
-                    meanlist.append(df[sensor].mean())
-                meanlist.append(freqdf[sensor].mean())
+        mean = {
+            "delta": 0,
+            "theta": 1,
+            "alpha": 2,
+            "beta": 3,
+            "gamma": 4,
+            "phi": 5,
+        }
 
-                delta = meanlist[mean['delta']]
-                theta = meanlist[mean['theta']]
-                alpha = meanlist[mean['alpha']]
-                beta = meanlist[mean['beta']]
-                gamma = meanlist[mean['gamma']]
-                phi = meanlist[mean['phi']]
-                # if (theta * alpha * beta * phi) == 0:
-                    # return
-                feat.append(delta)
-                feat.append(theta)
-                feat.append(alpha)
-                feat.append(beta)
-                feat.append(gamma)
-                feat.append(phi)
-                feat.append(theta/beta)
-                feat.append(theta/alpha)
-                feat.append(theta/phi)
-                feat.append(theta/(beta + alpha + gamma))
-                feat.append(delta/(beta + alpha + gamma))
-                feat.append(delta/alpha)
-                feat.append(delta/phi)
-                feat.append(delta/beta)
-                feat.append(delta/theta)
-                feat.append((theta + alpha)/beta)
-        else:
-            feat = freqdf.sum(axis=1).tolist()
-            # feat = freqdf[['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']].sum(axis=1).tolist()
+        for i, sensor in enumerate(['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']):
+            meanlist = []
+            for df in [deltadf, thetadf, alphadf, betadf, gammadf]:
+                meanlist.append(df[sensor].mean())
+            meanlist.append(freqdf[sensor].mean())
+
+            delta = meanlist[mean['delta']]
+            theta = meanlist[mean['theta']]
+            alpha = meanlist[mean['alpha']]
+            beta = meanlist[mean['beta']]
+            gamma = meanlist[mean['gamma']]
+            phi = meanlist[mean['phi']]
+            feat.append(delta)
+            feat.append(theta)
+            feat.append(alpha)
+            feat.append(beta)
+            feat.append(gamma)
+            feat.append(phi)
+            feat.append(theta/beta)
+            feat.append(theta/alpha)
+            feat.append(theta/phi)
+            feat.append(theta/(beta + alpha + gamma))
+            feat.append(delta/(beta + alpha + gamma))
+            feat.append(delta/alpha)
+            feat.append(delta/phi)
+            feat.append(delta/beta)
+            feat.append(delta/theta)
+            feat.append((theta + alpha)/beta)
+
         # Check for 'Early' for the old dataset.
         # Check for 'pre' for the new Mining Dataset
-        if test == "Train":
-            mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
-            feat.append(mental)
-            self.trainlist.append(feat)
-            self.n += 1
-        else:
-            mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
-            feat.append(mental)
-            self.testlist.append(feat)
-            # self.testdf.loc[self.m] = feat
-            self.m += 1
+        mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
+        feat.append(mental)
+        feat.append(self.filenumber % 5)
+        return feat
 
     # -------------------------------------------------------------------------
     # train
@@ -1179,14 +1268,32 @@ class EEG_GUI():
     def train(self):
         self.traindf = pd.DataFrame(self.trainlist, columns=self.trainheading)
         self.traindf = self.traindf.dropna()
-        # self.X = self.traindf.loc[:, self.traindf.columns != 'Class'].copy()
         self.X = self.traindf.loc[:, self.tstInclst.get(0, END)].copy()
-        X = (self.X - self.X.mean())/self.X.std()
+        x = (self.X - self.X.mean(axis=0))/self.X.std(axis=0)
 
-        X = X.to_numpy()
+        x = x.to_numpy()
         y = self.traindf.loc[:, "Class"].to_numpy()
-        self.clf = SVC(gamma='auto', kernel='rbf')
-        self.clf.fit(X, y)
+
+        # Hyperparameters to Test
+        param_grid = {'C': [0.1, 1, 10],
+                      'gamma': [0.01, 0.1, 1, 10, 'auto', 'scale'],
+                      'kernel': ['rbf'],
+                      'class_weight': ['balanced']}
+
+        # Cross Validation Split by 5 -> Split by File Number % 5
+        group = PredefinedSplit(self.traindf['File'].tolist())
+
+        self.clf = GridSearchCV(SVC(), param_grid, refit=True, verbose=3, n_jobs=-1, pre_dispatch=8, cv=group)
+        self.clf.fit(x, y)
+        scoretxt = "Cross Validation: {:.2f}%\n".format(self.clf.best_score_*100)
+        self.tstCSVtxt.insert(INSERT, scoretxt)
+        self.tstCSVtxt.update_idletasks()
+        print(self.clf.best_estimator_)
+        predict = self.clf.predict(x)
+        self.evaluate(y, predict)
+
+        #self.clf = SVC(gamma='auto', kernel='rbf')
+        #self.clf.fit(X, y)
 
         self.totalfatigue = 0
         self.totalfresh = 0
@@ -1200,67 +1307,46 @@ class EEG_GUI():
     #       This method tests the classifier.
     #
     # -------------------------------------------------------------------------
-    def test(self, folderout):
-        if self.printFeatures == True:
-            self.workbook = xlsxwriter.Workbook('{}/Experiment{}_{}.xlsx'.format(folderout, self.p, self.file))
-            self.worksheet = self.workbook.add_worksheet()
-            self.p += 1
+    def test(self):
         self.testdf = pd.DataFrame(self.testlist, columns=self.trainheading)
         self.testdf = self.testdf.dropna()
-        # X = self.testdf.loc[:, self.testdf.columns != 'Class'].copy()
-        X = self.testdf.loc[:, self.tstInclst.get(0, END)].copy()
-        X = (X - self.X.mean()) / self.X.std()
-        X = X.to_numpy()
+
+        # Prepare Test Matrix
+        x = self.testdf.loc[:, self.tstInclst.get(0, END)].copy()
+        x = (x - self.X.mean(axis=0)) / self.X.std(axis=0)
+        x = x.to_numpy()
+
+        # Set Grand Truth Aside
         y = self.testdf.loc[:, "Class"].to_numpy()
-        score = self.clf.score(X, y)
-        scoretxt = "{}\t{}\t{}\n".format(self.file, score, self.testdf.shape[0])
-        print(scoretxt)
 
-        if 'pre' in self.filename:
-            self.totalfresh += self.testdf.shape[0]
-            self.correctfresh += self.testdf.shape[0]*score
+        # Evaluate the Classifier
+        predict = self.clf.predict(x)
+        self.evaluate(y, predict)
 
-        else:
-            self.totalfatigue += self.testdf.shape[0]
-            self.correctfatigue += self.testdf.shape[0]*score
-
-        self.tstCSVtxt.insert(INSERT, scoretxt)
-        self.tstCSVtxt.update_idletasks()
-
-        if self.printFeatures:
-            y = self.clf.predict(X)
-            self.testdf["Class"] = y
-
-            for i, header in enumerate(self.trainheading):
-                self.worksheet.write(0, i, header)
-            for row, data in self.testdf.iterrows():
-                for col, columnname in enumerate(self.testdf):
-                    self.worksheet.write(row, col, self.testdf.loc[row, columnname])
-                    col += 1
-                row += 1
-
-            prediction = "AW" if self.useFeatures else "SG"
-            self.worksheet.write(0, col, "=COUNTIF({}:{},\"Fatigued\")".format(prediction, prediction))
-            self.worksheet.write(1, col, "=COUNTA({}:{})".format(prediction, prediction))
-            self.workbook.close()
-
+        # Reset the Test Data Frame and List
         self.testdf = self.testdf.iloc[0:0]
-        self.testlist = []
-        self.m = 0
+        # self.testlist = []
 
-        if self.totalfatigue*self.totalfresh != 0:
-            sensitivity = self.correctfatigue / self.totalfatigue
-            specificity = self.correctfresh / self.totalfresh
-            pospred = self.correctfatigue / (self.totalfresh - self.correctfresh + self.totalfatigue)
-            negpred = self.correctfresh / (self.totalfatigue - self.correctfatigue + self.totalfresh)
+    # -------------------------------------------------------------------------
+    # test
+    #
+    # Description:
+    #       This method tests the classifier.
+    #
+    # -------------------------------------------------------------------------
+    def evaluate(self, truth, predict):
+        tn, fp, fn, tp = confusion_matrix(truth, predict, labels=["Fatigued", "Not Fatigued"]).ravel()
+        print(tn, tp, fn, fp)
+        sensitivity = tn / (tn + fp)
+        specificity = tp / (tp + fn)
+        pospred = tn / (tn + fn)
+        negpred = tp / (tp + fp)
+        self.varSensitivity.set(sensitivity)
+        self.varSpecificity.set(specificity)
+        self.varPositivePred.set(pospred)
+        self.varNegativePred.set(negpred)
 
-            self.varSensitivity.set(sensitivity)
-            self.varSpecificity.set(specificity)
-            self.varPositivePred.set(pospred)
-            self.varNegativePred.set(negpred)
-
-            self.varPerformance.set((sensitivity * specificity)**(1/2))
-
+        self.varPerformance.set((sensitivity * specificity) ** (1 / 2))
 
     # -------------------------------------------------------------------------
     # onClose
@@ -1275,20 +1361,23 @@ class EEG_GUI():
 
 if __name__ == "__main__":
     # Profiler Start
-    # pr = cProfile.Profile()
-    # pr.enable()
+    useProfile = False
+    if useProfile:
+        pr = cProfile.Profile()
+        pr.enable()
 
     root = tk.Tk()
-    game = EEG_GUI(master=root)
+    game = EegGui(master=root)
     root.mainloop()
     root.quit()
 
     # Profiler End
-    # pr.disable()
-    # s = io.StringIO()
-    # sortby = SortKey.CUMULATIVE
-    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    # ps.print_callees(.05)
-    # print(s.getvalue())
-    tk.sys.exit(0)
+    if useProfile:
+        pr.disable()
+        s = io.StringIO()
+        sortby = SortKey.CUMULATIVE
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_callees(.05)
+        print(s.getvalue())
+    sys.exit(0)
 
