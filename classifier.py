@@ -42,17 +42,19 @@ import itertools as it
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pickle as pk
 import tkinter as tk
 import tkinter.ttk as ttk
-import xlsxwriter
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from pstats import SortKey
 from scipy import signal, fftpack
+from sklearn.feature_selection import RFECV
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import GridSearchCV, PredefinedSplit
 from sklearn.svm import SVC
-from tkinter import N, E, W, S, filedialog, font, INSERT, END, RIDGE
+from tkinter import N, E, W, S, filedialog, font, END, RIDGE
 
 
 class EegGui:
@@ -191,7 +193,7 @@ class EegGui:
         self.allLabels['Controls.TLabel'].append(self.domConlbl)
 
         self.varPlot = 0
-        self.switchbtn = ttk.Button(self.pagectr[0], text="Frequency", command=self.switchDomain)
+        self.switchbtn = ttk.Button(self.pagectr[0], text="Frequency", command=self.switchdomain)
         self.switchbtn.grid(row=10, column=0, columnspan=2, pady=5, padx=5)
         self.allLabels['TButton'].append(self.switchbtn)
 
@@ -246,9 +248,9 @@ class EegGui:
         self.allLabels['Controls.TLabel'].append(self.selMrklbl)
 
         self.varXax = tk.StringVar()
-        self.varXax.trace('w', self.plotFeature)
+        self.varXax.trace('w', self.plotfeature)
         self.varYax = tk.StringVar()
-        self.varYax.trace('w', self.plotFeature)
+        self.varYax.trace('w', self.plotfeature)
         self.mnuXaxlbl = ttk.Label(self.pagectr[1], text='X-Axis', style='ControlsL.TLabel')
         self.mnuXaxlbl.grid(row=1, column=0, sticky=E, pady=5, padx=5)
         self.allLabels['ControlsL.TLabel'].append(self.mnuXaxlbl)
@@ -298,7 +300,7 @@ class EegGui:
 
         self.varMrk = tk.IntVar()
         self.varMrk.set(0)
-        self.varMrk.trace('w', self.plotMarker)
+        self.varMrk.trace('w', self.plotmarker)
         self.mnuMrklbl = ttk.Label(self.pagectr[2], text='Marker', style='ControlsL.TLabel')
         self.mnuMrklbl.grid(row=1, column=0, sticky=E, pady=5, padx=5)
         self.allLabels['ControlsL.TLabel'].append(self.mnuMrklbl)
@@ -330,7 +332,7 @@ class EegGui:
         # Page 3 - Train Classifier Controls
         for i, w in enumerate([1]):
             self.pagectr[3].grid_columnconfigure(i, weight=w)
-        for i, w in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]):
+        for i, w in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]):
             self.pagectr[3].grid_rowconfigure(i, weight=w)
 
         self.modConsep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
@@ -356,59 +358,78 @@ class EegGui:
         self.tstModbtn.grid(row=4, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstModbtn)
 
+        self.savModbtn = ttk.Button(self.pagectr[3], text="Save Model", command=self.save)
+        self.savModbtn.grid(row=5, column=0, columnspan=3, pady=5, padx=5)
+        self.allLabels['TButton'].append(self.savModbtn)
+
         self.filConsep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
-        self.filConsep.grid(row=5, column=0, columnspan=3, sticky=E + W, pady=5, padx=5)
+        self.filConsep.grid(row=6, column=0, columnspan=3, sticky=E + W, pady=5, padx=5)
 
         self.filConlbl = ttk.Label(self.pagectr[3], text='Filter Controls', style='Controls.TLabel')
-        self.filConlbl.grid(row=5, column=0, columnspan=3, pady=5, padx=5)
+        self.filConlbl.grid(row=6, column=0, columnspan=3, pady=5, padx=5)
         self.allLabels['Controls.TLabel'].append(self.filConlbl)
 
         self.filHiglbl = ttk.Label(self.pagectr[3], text="High:", style='ControlsL.TLabel')
-        self.filHiglbl.grid(row=6, column=0, sticky=E, pady=2, padx=0)
+        self.filHiglbl.grid(row=7, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filHiglbl)
 
         self.filLowlbl = ttk.Label(self.pagectr[3], text="Low:", style='ControlsL.TLabel')
-        self.filLowlbl.grid(row=7, column=0, sticky=E, pady=2, padx=0)
+        self.filLowlbl.grid(row=8, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filLowlbl)
 
         self.filDurlbl = ttk.Label(self.pagectr[3], text="Duration:", style='ControlsL.TLabel')
-        self.filDurlbl.grid(row=8, column=0, sticky=E, pady=2, padx=0)
+        self.filDurlbl.grid(row=9, column=0, sticky=E, pady=2, padx=0)
         self.allLabels['ControlsL.TLabel'].append(self.filDurlbl)
+
+        self.filPuslbl = ttk.Label(self.pagectr[3], text="Max Amplitude:", style='ControlsL.TLabel')
+        self.filPuslbl.grid(row=10, column=0, sticky=E, pady=2, padx=0)
+        self.allLabels['ControlsL.TLabel'].append(self.filPuslbl)
 
         self.varHighCut = tk.IntVar()
         self.varHighCut.set(249)
         self.varHighCut.trace('w', self.limitlower)
         self.filHigsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varHighCut, length=150)
-        self.filHigsld.grid(row=6, column=1, sticky=E + W)
+        self.filHigsld.grid(row=7, column=1, sticky=E + W)
 
         self.varLowCut = tk.IntVar()
         self.varLowCut.set(1)
         self.varLowCut.trace('w', self.limitupper)
         self.filLowsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varLowCut, length=150)
-        self.filLowsld.grid(row=7, column=1, sticky=E+W)
+        self.filLowsld.grid(row=8, column=1, sticky=E+W)
 
         self.varWindow = tk.IntVar()
         self.varWindow.set(4)
         self.varWindow.trace('w', self.updateduration)
         self.filWinsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varWindow, length=150)
-        self.filWinsld.grid(row=8, column=1, sticky=E+W)
+        self.filWinsld.grid(row=9, column=1, sticky=E+W)
+
+        self.varPulsemax = tk.IntVar()
+        self.varPulsemax.set(100)
+        self.varPulsemax.trace('w', self.updatepulse)
+        self.filPussld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varPulsemax, length=150)
+        self.filPussld.grid(row=10, column=1, sticky=E+W)
 
         self.filHigval = ttk.Label(self.pagectr[3], text='124.5', style='ControlsL.TLabel')
-        self.filHigval.grid(row=6, column=2, sticky=W, pady=2, padx=2)
+        self.filHigval.grid(row=7, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filHigval)
+
         self.filLowval = ttk.Label(self.pagectr[3], text='0.5', style='ControlsL.TLabel')
-        self.filLowval.grid(row=7, column=2, sticky=W, pady=2, padx=2)
+        self.filLowval.grid(row=8, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filLowval)
 
         self.filDurval = ttk.Label(self.pagectr[3], text='4.0 s', style='ControlsL.TLabel')
-        self.filDurval.grid(row=8, column=2, sticky=W, pady=2, padx=2)
+        self.filDurval.grid(row=9, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filDurval)
 
+        self.filPusval = ttk.Label(self.pagectr[3], text='100 uV', style='ControlsL.TLabel')
+        self.filPusval.grid(row=10, column=2, sticky=W, pady=2, padx=2)
+        self.allLabels['ControlsL.TLabel'].append(self.filPusval)
+
         self.endsep3 = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
-        self.endsep3.grid(row=9, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
+        self.endsep3.grid(row=11, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
 
         self.bar = ttk.Progressbar(self.pagectr[3])
-        self.bar.grid(row=9, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
+        self.bar.grid(row=11, column=0, columnspan=3, sticky=E+W, pady=5, padx=5)
         self.bar.grid_remove()
 
         self.modFeasep = ttk.Separator(self.pagectr[3], style='Controls.TSeparator')
@@ -420,103 +441,183 @@ class EegGui:
         self.includelist = tk.StringVar()
         self.excludelist = tk.StringVar()
         self.tstInclst = tk.Listbox(self.pagectr[3], selectmode='extended', listvariable=self.includelist)
-        self.tstInclst.grid(row=1, column=3, rowspan=10, sticky=N+E+W+S, pady=10, padx=10)
+        self.tstInclst.grid(row=1, column=3, rowspan=12, sticky=N+E+W+S, pady=10, padx=10)
         self.tstExclst = tk.Listbox(self.pagectr[3], selectmode='extended', listvariable=self.excludelist)
-        self.tstExclst.grid(row=1, column=4, rowspan=10, sticky=N+E+W+S, pady=10, padx=10)
+        self.tstExclst.grid(row=1, column=4, rowspan=12, sticky=N+E+W+S, pady=10, padx=10)
 
         self.tstExcbtn = ttk.Button(self.pagectr[3], text="Exclude", command=self.exclude)
-        self.tstExcbtn.grid(row=11, column=3, pady=5, padx=5)
+        self.tstExcbtn.grid(row=13, column=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstExcbtn)
 
         self.tstIncbtn = ttk.Button(self.pagectr[3], text="Include", command=self.include)
-        self.tstIncbtn.grid(row=11, column=4, pady=5, padx=5)
+        self.tstIncbtn.grid(row=13, column=4, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstIncbtn)
 
         self.tstRembtn = ttk.Button(self.pagectr[3], text="Exclude All", command=self.removefeat)
-        self.tstRembtn.grid(row=12, column=3, pady=5, padx=5)
+        self.tstRembtn.grid(row=14, column=3, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstRembtn)
 
         self.tstAddbtn = ttk.Button(self.pagectr[3], text="Include All", command=self.addfeat)
-        self.tstAddbtn.grid(row=12, column=4, pady=5, padx=5)
+        self.tstAddbtn.grid(row=14, column=4, pady=5, padx=5)
         self.allLabels['TButton'].append(self.tstAddbtn)
 
         # Page 3 - Train Classifier Display
-        for i, w in enumerate([0, 0, 1]):
+        for i, w in enumerate([0, 0, 0, 0, 0, 1]):
             self.pagedis[3].grid_columnconfigure(i, weight=w)
         for i, w in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 1]):
             self.pagedis[3].grid_rowconfigure(i, weight=w)
 
-        self.claRessep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
-        self.claRessep.grid(row=0, column=0, columnspan=2, sticky=E+W, pady=5, padx=10)
-        self.claReslbl = ttk.Label(self.pagedis[3], text="Classifier Score", style='Display.TLabel')
-        self.claReslbl.grid(row=0, column=0, columnspan=2, pady=5, padx=5)
-        self.allLabels['Display.TLabel'].append(self.claReslbl)
+        #self.claScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        #self.claScosep.grid(row=0, column=2, sticky=E+W, pady=5, padx=50)
+        #self.claScolbl = ttk.Label(self.pagedis[3], text="Test Score by File", style='Display.TLabel')
+        #self.claScolbl.grid(row=0, column=2, pady=5, padx=5)
+        #self.allLabels['Display.TLabel'].append(self.claScolbl)
 
-        self.claScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
-        self.claScosep.grid(row=0, column=2, sticky=E+W, pady=5, padx=50)
-        self.claScolbl = ttk.Label(self.pagedis[3], text="Test Score by File", style='Display.TLabel')
-        self.claScolbl.grid(row=0, column=2, pady=5, padx=5)
-        self.allLabels['Display.TLabel'].append(self.claScolbl)
+        self.traScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.traScosep.grid(row=0, column=0, columnspan=2, sticky=E+W, pady=5, padx=10)
+        self.traScolbl = ttk.Label(self.pagedis[3], text="Training Score", style='Display.TLabel')
+        self.traScolbl.grid(row=0, column=0, columnspan=2, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.traScolbl)
 
-        self.senScolbl = ttk.Label(self.pagedis[3], text="Sensitivity:", style='DisplayL.TLabel')
-        self.senScolbl.grid(row=1, column=0, sticky=E, pady=1, padx=5)
-        self.allLabels['DisplayL.TLabel'].append(self.senScolbl)
+        self.senTralbl = ttk.Label(self.pagedis[3], text="Sensitivity:", style='DisplayL.TLabel')
+        self.senTralbl.grid(row=1, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.senTralbl)
 
-        self.speScolbl = ttk.Label(self.pagedis[3], text="Specificity:", style='DisplayL.TLabel')
-        self.speScolbl.grid(row=2, column=0, sticky=E, pady=1, padx=5)
-        self.allLabels['DisplayL.TLabel'].append(self.speScolbl)
+        self.speTralbl = ttk.Label(self.pagedis[3], text="Specificity:", style='DisplayL.TLabel')
+        self.speTralbl.grid(row=2, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.speTralbl)
 
-        self.posScolbl = ttk.Label(self.pagedis[3], text="Positive Predictive:", style='DisplayL.TLabel')
-        self.posScolbl.grid(row=3, column=0, sticky=E, pady=1, padx=5)
-        self.allLabels['DisplayL.TLabel'].append(self.posScolbl)
+        self.posTralbl = ttk.Label(self.pagedis[3], text="Positive Predictive:", style='DisplayL.TLabel')
+        self.posTralbl.grid(row=3, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.posTralbl)
 
-        self.negScolbl = ttk.Label(self.pagedis[3], text="Negative Predictive:", style='DisplayL.TLabel')
-        self.negScolbl.grid(row=4, column=0, sticky=E, pady=1, padx=5)
-        self.allLabels['DisplayL.TLabel'].append(self.negScolbl)
+        self.negTralbl = ttk.Label(self.pagedis[3], text="Negative Predictive:", style='DisplayL.TLabel')
+        self.negTralbl.grid(row=4, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.negTralbl)
 
-        self.perScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
-        self.perScosep.grid(row=5, column=0, columnspan=2, sticky=E+W, pady=5, padx=10)
+        self.perTrasep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.perTrasep.grid(row=5, column=0, columnspan=2, sticky=E+W, pady=5, padx=10)
 
-        self.perScolbl = ttk.Label(self.pagedis[3], text="Overall Performance:", style='DisplayL.TLabel')
-        self.perScolbl.grid(row=6, column=0, sticky=E, pady=1, padx=5)
-        self.allLabels['DisplayL.TLabel'].append(self.perScolbl)
+        self.perTralbl = ttk.Label(self.pagedis[3], text="Overall Performance:", style='DisplayL.TLabel')
+        self.perTralbl.grid(row=6, column=0, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.perTralbl)
 
-        self.varSensitivity = tk.DoubleVar()
-        self.varSpecificity = tk.DoubleVar()
-        self.varPositivePred = tk.DoubleVar()
-        self.varNegativePred = tk.DoubleVar()
-        self.varPerformance = tk.DoubleVar()
+        self.varSensTrain = tk.DoubleVar()
+        self.varSpecTrain = tk.DoubleVar()
+        self.varPospTrain = tk.DoubleVar()
+        self.varNegpTrain = tk.DoubleVar()
+        self.varPerfTrain = tk.DoubleVar()
 
-        self.varSensitivity.set(0)
-        self.varSpecificity.set(0)
-        self.varPositivePred.set(0)
-        self.varNegativePred.set(0)
-        self.varPerformance.set(0)
+        self.varSensTrain.set(0)
+        self.varSpecTrain.set(0)
+        self.varPospTrain.set(0)
+        self.varNegpTrain.set(0)
+        self.varPerfTrain.set(0)
 
-        self.varPerformance.trace('w', self.updatescore)
+        self.varPerfTrain.trace('w', self.updatetrainscore)
 
-        self.senScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
-        self.senScoval.grid(row=1, column=1, sticky=W, pady=1, padx=2)
-        self.allLabels['DisplayL.TLabel'].append(self.senScoval)
+        self.senTraval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.senTraval.grid(row=1, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.senTraval)
 
-        self.speScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
-        self.speScoval.grid(row=2, column=1, sticky=W, pady=1, padx=2)
-        self.allLabels['DisplayL.TLabel'].append(self.speScoval)
+        self.speTraval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.speTraval.grid(row=2, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.speTraval)
 
-        self.posScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
-        self.posScoval.grid(row=3, column=1, sticky=W, pady=1, padx=2)
-        self.allLabels['DisplayL.TLabel'].append(self.posScoval)
+        self.posTraval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.posTraval.grid(row=3, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.posTraval)
 
-        self.negScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
-        self.negScoval.grid(row=4, column=1, sticky=W, pady=1, padx=2)
-        self.allLabels['DisplayL.TLabel'].append(self.negScoval)
+        self.negTraval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.negTraval.grid(row=4, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.negTraval)
 
-        self.perScoval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
-        self.perScoval.grid(row=6, column=1, sticky=W, pady=1, padx=2)
-        self.allLabels['DisplayL.TLabel'].append(self.perScoval)
+        self.perTraval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.perTraval.grid(row=6, column=1, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.perTraval)
 
-        self.tstCSVtxt = tk.Text(self.pagedis[3])
-        self.tstCSVtxt.grid(row=1, column=2, rowspan=8, sticky=N+E+W+S, pady=10, padx=10)
+        self.tesScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.tesScosep.grid(row=0, column=2, columnspan=2, sticky=E + W, pady=5, padx=10)
+        self.tesScolbl = ttk.Label(self.pagedis[3], text="Testing Score", style='Display.TLabel')
+        self.tesScolbl.grid(row=0, column=2, columnspan=2, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.tesScolbl)
+
+        self.senTeslbl = ttk.Label(self.pagedis[3], text="Sensitivity:", style='DisplayL.TLabel')
+        self.senTeslbl.grid(row=1, column=2, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.senTeslbl)
+
+        self.speTeslbl = ttk.Label(self.pagedis[3], text="Specificity:", style='DisplayL.TLabel')
+        self.speTeslbl.grid(row=2, column=2, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.speTeslbl)
+
+        self.posTeslbl = ttk.Label(self.pagedis[3], text="Positive Predictive:", style='DisplayL.TLabel')
+        self.posTeslbl.grid(row=3, column=2, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.posTeslbl)
+
+        self.negTeslbl = ttk.Label(self.pagedis[3], text="Negative Predictive:", style='DisplayL.TLabel')
+        self.negTeslbl.grid(row=4, column=2, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.negTeslbl)
+
+        self.perTessep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.perTessep.grid(row=5, column=2, columnspan=2, sticky=E + W, pady=5, padx=10)
+
+        self.perTeslbl = ttk.Label(self.pagedis[3], text="Overall Performance:", style='DisplayL.TLabel')
+        self.perTeslbl.grid(row=6, column=2, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.perTeslbl)
+
+        self.varSensTest = tk.DoubleVar()
+        self.varSpecTest = tk.DoubleVar()
+        self.varPospTest = tk.DoubleVar()
+        self.varNegpTest = tk.DoubleVar()
+        self.varPerfTest = tk.DoubleVar()
+
+        self.varSensTest.set(0)
+        self.varSpecTest.set(0)
+        self.varPospTest.set(0)
+        self.varNegpTest.set(0)
+        self.varPerfTest.set(0)
+
+        self.varPerfTest.trace('w', self.updatetestscore)
+
+        self.senTesval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.senTesval.grid(row=1, column=3, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.senTesval)
+
+        self.speTesval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.speTesval.grid(row=2, column=3, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.speTesval)
+
+        self.posTesval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.posTesval.grid(row=3, column=3, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.posTesval)
+
+        self.negTesval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.negTesval.grid(row=4, column=3, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.negTesval)
+
+        self.perTesval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.perTesval.grid(row=6, column=3, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.perTesval)
+
+        self.valScosep = ttk.Separator(self.pagedis[3], style='Display.TSeparator')
+        self.valScosep.grid(row=0, column=4, columnspan=2, sticky=E + W, pady=5, padx=10)
+        self.valScolbl = ttk.Label(self.pagedis[3], text="Validation Score", style='Display.TLabel')
+        self.valScolbl.grid(row=0, column=4, columnspan=2, pady=5, padx=5)
+        self.allLabels['Display.TLabel'].append(self.valScolbl)
+
+        self.scoVallbl = ttk.Label(self.pagedis[3], text="Score:", style='DisplayL.TLabel')
+        self.scoVallbl.grid(row=1, column=4, sticky=E, pady=1, padx=5)
+        self.allLabels['DisplayL.TLabel'].append(self.scoVallbl)
+
+        self.varPerfValid = tk.DoubleVar()
+        self.varPerfValid.set(0)
+
+        self.perValval = ttk.Label(self.pagedis[3], text='0.00%', style='DisplayL.TLabel')
+        self.perValval.grid(row=1, column=5, sticky=W, pady=1, padx=2)
+        self.allLabels['DisplayL.TLabel'].append(self.perValval)
+
+        # self.tstCSVtxt = tk.Text(self.pagedis[3])
+        # self.tstCSVtxt.grid(row=1, column=4, rowspan=8, sticky=N+E+W+S, pady=10, padx=10)
 
         # Page 4 - Histogram
         for i, w in enumerate([0]):
@@ -557,15 +658,14 @@ class EegGui:
 
         # Test Parameter Flags
         self.useMark = False
-        self.printFeatures = False
         self.testing = ''
-        if self.printFeatures:
-            self.p = 0
 
         # File Variables
         self.file = ''
         self.filename = ''
         self.filenumber = 0
+        self.filelist = []
+        self.folder = ''
 
         # Pre-processing DataFrames
         self.eegdf = pd.DataFrame()
@@ -589,14 +689,11 @@ class EegGui:
         self.trainlist = []
         self.testlist = []
 
+        self.minrow = [100000] * 5
+        self.maxrow = [0] * 5
+
         self.X = None
         self.clf = None
-
-        # Evaluation
-        self.totalfatigue = 0
-        self.totalfresh = 0
-        self.correctfatigue = 0
-        self.correctfresh = 0
 
     # |METHODS|----------------------------------------------------------------
     # -------------------------------------------------------------------------
@@ -689,7 +786,7 @@ class EegGui:
         # Time Domain Plot
         self.axs1.cla()
         y1 = next(self.ys1)
-        y1.plot(kind='line', x='Time', legend=True, ax=self.axs1, linewidth=0.2)
+        y1.plot(kind='line', x='Time', legend=True, ax=self.axs1, linewidth=0.3)
         self.axs1.set_title('Time Domain:{}'.format(self.file))
         self.axs1.set_xlabel('Time, [s]')
         self.axs1.set_ylabel('EEG Signal, [uV]')
@@ -698,11 +795,14 @@ class EegGui:
         # Frequency Domain Plot
         self.axs2.cla()
         y2 = next(self.ys2)
-        y2.plot(kind='line', x='Freqp', legend=True, ax=self.axs2, linewidth=0.2)
+        y2.plot(kind='line', x='Freqp', legend=True, ax=self.axs2, linewidth=0.3)
         self.axs2.set_title('Frequency Domain:{}'.format(self.file))
         self.axs2.set_xlabel('Frequency, [Hz]')
         self.axs2.set_ylabel('EEG Amplitude, [uV]')
         self.fig2.canvas.draw()
+
+        # Call to update the time axis variables
+        self.ploteeg()
 
     # -------------------------------------------------------------------------
     # switchfont
@@ -726,12 +826,13 @@ class EegGui:
         self.style.configure('Controls.TLabel', font=self.fontpreset['Heading'])
         self.style.configure('Display.TLabel', font=self.fontpreset['Heading'])
         self.style.configure('ControlsL.TLabel', font=self.fontpreset['Label'])
+        self.style.configure('DisplayL.TLabel', font=self.fontpreset['Label'])
         self.style.configure('Main.TNotebook.Tab', font=self.fontpreset['Tab'])
         self.style.configure('TButton', font=self.fontpreset['Button'])
         self.style.configure('TMenubutton', font=self.fontpreset['Button'])
 
-        for style in ['Main.TLabel', 'Controls.TLabel', 'Display.TLabel', 'ControlsL.TLabel', 'Main.TNotebook',
-                      'TButton', 'TMenubutton']:
+        for style in ['Main.TLabel', 'Controls.TLabel', 'Display.TLabel', 'ControlsL.TLabel', 'DisplayL.TLabel',
+                      'Main.TNotebook', 'TButton', 'TMenubutton']:
             for widget in self.allLabels[style]:
                 widget.config(style=style)
         print(new)
@@ -764,28 +865,52 @@ class EegGui:
     # updateduration
     #
     # Description:
-    #       This method sets the lower limit for the higher cut-off frequency.
+    #       This method sets the window for sample size.
     #
     # -------------------------------------------------------------------------
     def updateduration(self, *args):
         self.varWindow.set(int(self.varWindow.get()))
         self.filDurval.config(text="{} s".format(self.varWindow.get()))
-        self.filHigsld.config(from_=self.varLowCut.get())
-        self.filLowval.config(text=self.varLowCut.get()/2)
+
     # -------------------------------------------------------------------------
-    # updateSens
+    # updatepulse
     #
     # Description:
-    #       This method updates the score displayed on the GUI.
+    #       This method sets the window for sample size.
     #
     # -------------------------------------------------------------------------
+    def updatepulse(self, *args):
+        self.varPulsemax.set(int(self.varPulsemax.get()))
+        self.filPusval.config(text="{} uV".format(self.varPulsemax.get()))
 
-    def updatescore(self, *args):
-        self.senScoval.config(text="{:.2f}%".format(self.varSensitivity.get()*100))
-        self.speScoval.config(text="{:.2f}%".format(self.varSpecificity.get() * 100))
-        self.posScoval.config(text="{:.2f}%".format(self.varPositivePred.get() * 100))
-        self.negScoval.config(text="{:.2f}%".format(self.varNegativePred.get() * 100))
-        self.perScoval.config(text="{:.2f}%".format(self.varPerformance.get() * 100))
+    # -------------------------------------------------------------------------
+    # updatetrainscore
+    #
+    # Description:
+    #       This method updates the training score displayed on the GUI.
+    #
+    # -------------------------------------------------------------------------
+    def updatetrainscore(self, *args):
+        self.senTraval.config(text="{:.2f}%".format(self.varSensTrain.get() * 100))
+        self.speTraval.config(text="{:.2f}%".format(self.varSpecTrain.get() * 100))
+        self.posTraval.config(text="{:.2f}%".format(self.varPospTrain.get() * 100))
+        self.negTraval.config(text="{:.2f}%".format(self.varNegpTrain.get() * 100))
+        self.perTraval.config(text="{:.2f}%".format(self.varPerfTrain.get() * 100))
+        self.perValval.config(text="{:.2f}%".format(self.varPerfValid.get() * 100))
+
+    # -------------------------------------------------------------------------
+    # updatetestscore
+    #
+    # Description:
+    #       This method updates the testing score displayed on the GUI.
+    #
+    # -------------------------------------------------------------------------
+    def updatetestscore(self, *args):
+        self.senTesval.config(text="{:.2f}%".format(self.varSensTest.get() * 100))
+        self.speTesval.config(text="{:.2f}%".format(self.varSpecTest.get() * 100))
+        self.posTesval.config(text="{:.2f}%".format(self.varPospTest.get() * 100))
+        self.negTesval.config(text="{:.2f}%".format(self.varNegpTest.get() * 100))
+        self.perTesval.config(text="{:.2f}%".format(self.varPerfTest.get() * 100))
 
     # -------------------------------------------------------------------------
     # viewcsv
@@ -824,8 +949,10 @@ class EegGui:
         self.tstInclst.delete(0, END)
         self.tstExclst.delete(0, END)
 
-        for column in self.trainheading[:-2]:
+        for column in sorted(self.trainheading[:-2]):
             self.tstInclst.insert(END, column)
+
+        self.axupdate()
 
     # -------------------------------------------------------------------------
     # removefeat
@@ -841,6 +968,8 @@ class EegGui:
         for column in self.trainheading[:-2]:
             self.tstExclst.insert(END, column)
 
+        self.axupdate()
+
     # -------------------------------------------------------------------------
     # exclude
     #
@@ -849,8 +978,8 @@ class EegGui:
     #
     # -------------------------------------------------------------------------
     def exclude(self):
-        list = sorted(self.tstInclst.curselection(), reverse=True)
-        for item in list:
+        lst = sorted(self.tstInclst.curselection(), reverse=True)
+        for item in lst:
             self.tstExclst.insert(END, self.tstInclst.get(item))
             self.tstInclst.delete(item)
 
@@ -859,11 +988,7 @@ class EegGui:
         for item in sort:
             self.tstExclst.insert(END, item)
 
-        self.selXaxmnu['menu'].delete(0, 'end')
-        self.selYaxmnu['menu'].delete(0, 'end')
-        for item in self.tstInclst.get(0, END):
-            self.selXaxmnu['menu'].add_command(label=item, command=lambda x=item: self.varXax.set(x))
-            self.selYaxmnu['menu'].add_command(label=item, command=lambda x=item: self.varYax.set(x))
+        self.axupdate()
 
     # -------------------------------------------------------------------------
     # include
@@ -883,6 +1008,16 @@ class EegGui:
         for item in sort:
             self.tstInclst.insert(END, item)
 
+        self.axupdate()
+
+    # -------------------------------------------------------------------------
+    # axupdate
+    #
+    # Description:
+    #       This method updates the axis options for the feature plots.
+    #
+    # -------------------------------------------------------------------------
+    def axupdate(self):
         self.selXaxmnu['menu'].delete(0, 'end')
         self.selYaxmnu['menu'].delete(0, 'end')
         for item in self.tstInclst.get(0, END):
@@ -899,10 +1034,9 @@ class EegGui:
     def getcsv(self, test):
         # Select the training data folder
         self.folder = filedialog.askdirectory(title="Select the Folder with the {}ing Data".format(test))
-        self.folderout = ""
-        if test == "Test" and self.printFeatures:
+        if test == "Test":
             # Select the output folder
-            self.folderout = filedialog.askdirectory(title="Select an Output Folder")
+            self.testlist = []
         if test == "Train":
             self.trainlist = []
             self.addfeat()
@@ -912,9 +1046,7 @@ class EegGui:
         self.bar.config(maximum=len(os.listdir(self.folder)), value=0)
         self.testing = test
 
-        self.master.after(10, self.collectcsv)
-
-        # Prepare the Training Data
+        self.master.after(1, self.collectcsv)
 
     def collectcsv(self):
         self.file = next(self.filelist, "end")
@@ -934,27 +1066,23 @@ class EegGui:
             self.filenumber = int(''.join(c for c in self.file if c.isdigit()))
             feats = self.preprocess()
             if self.testing == "Train":
-                for feat in feats:
-                    self.trainlist.append(feat)
+                self.trainlist.extend(feats)
             else:
-                for feat in feats:
-                    self.testlist.append(feat)
+                self.testlist.extend(feats)
 
             # Test the Data
-            self.master.after(10, self.collectcsv)
+            self.master.after(1, self.collectcsv)
         else:
             self.bar.grid_remove()
-            # if self.testing == "Test":
-                # self.test()
 
     # -------------------------------------------------------------------------
-    # switchDomain
+    # switchdomain
     #
     # Description:
     #       This method is used for switching the plot displayed.
     #
     # -------------------------------------------------------------------------
-    def switchDomain(self):
+    def switchdomain(self):
         if self.varPlot:
             self.switchbtn.config(text='Frequency')
             self.disTimlbl.config(text='Time Domain Plot')
@@ -978,6 +1106,7 @@ class EegGui:
     def preprocess(self):
         fs = 250
         window = self.varWindow.get()
+        pulsemax = self.varPulsemax.get()
         datalist = []
 
         # Change the 20 into a variable
@@ -989,36 +1118,46 @@ class EegGui:
         [b, a] = signal.butter(4, [self.varLowCut.get() / fs, self.varHighCut.get() / fs], btype='bandpass')
         self.eegdf['Total'] = 0
         # Place a band stop filter from 55 Hz to 60 Hz
+        # eegmean = self.eegdf.mean()
         for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-            self.eegdf[col] -= self.eegdf[col].mean()                       # Remove the mean offset (~800 Muse Units)
-            self.eegdf.loc[:, col] *= 1.64498                               # Convert into uV
+            self.eegdf[col] -= 800 # eegmean[col]                           # Remove the mean offset (~800 Muse Units)
+            self.eegdf[col] *= 1.64498                                      # Convert into uV
             self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])        # Apply the bandpass filter
             self.eegdf['Total'] += abs(self.eegdf[col]) / 4                 # Record the Average Amplitude
 
         # Remove High Amplitude Spikes
-        while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
-            self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
-            self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
-            for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-                self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
-                self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
+        self.eegdf = self.eegdf[self.eegdf['Total'] < pulsemax].copy()
+
+        #while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
+        #    self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
+        #    self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
+        #    for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+        #        self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
+        #        self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
 
         self.eegdf.reset_index(inplace=True)
         size = self.eegdf.shape[0]
+        if size < self.minrow[self.filenumber % 5]:
+            self.minrow[self.filenumber % 5] = size
+            print("Min: {}\t{}".format(self.file, size))
+        if size > self.maxrow[self.filenumber % 5]:
+            self.maxrow[self.filenumber % 5] = size
+            print("Max: {}\t{}".format(self.file, size))
 
         # Add a time column 250 Hz
-        time = [1 / fs * x for x in range(0, size)]
+        time = np.linspace(0, size/fs, size)
         self.eegdf.insert(0, "Time", time)
 
         # Prepare the Frequency Data Frame
-        self.fftdf['Freq'] = pd.Series(np.linspace(0.0, fs / 2, fs*window // 2 + 1))
+        self.fftdf['Freq'] = np.linspace(0.0, fs / 2, fs*window // 2 + 1)
+        self.fftdf.set_index("Freq")
 
-        for i in range(0, int((1/fs*size)//1), window):
-            df = self.eegdf.loc[(self.eegdf.Time >= i) & (self.eegdf.Time < (i + window))]
+        for i in range(0, size, window*fs):
+            df = self.eegdf.iloc[i:i+window*fs]
             N = df.shape[0]
             for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
                 if df[col].shape[0]:
-                    fft = fftpack.fft(df[col])[0:N // 2 + 1]
+                    fft = fftpack.fft(df[col].to_numpy())[0:N // 2 + 1]
                     fft = 1 / (fs * N) * np.abs(fft) ** 2
                     fft[2:-2] = [2 * x for x in fft[2:-2]]
                     self.fftdf[col + 'fft'] = pd.Series(fft)
@@ -1039,6 +1178,7 @@ class EegGui:
         fs = 250
         fband = [4, 8, 15, 32, 100]
         wband = [2 * x / fs for x in fband]
+        pulsemax = self.varPulsemax.get()
 
         # Change the 20 into a variable
         if self.useMark:
@@ -1049,18 +1189,20 @@ class EegGui:
         [b, a] = signal.butter(4, [self.varLowCut.get() / fs, self.varHighCut.get() / fs], btype='bandpass')
         self.eegdf['Total'] = 0
         for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-            self.eegdf[col] -= self.eegdf[col].mean()                       # Remove the mean offset (~800 Muse Units)
+            self.eegdf[col] -= 800# self.eegdf[col].mean()                       # Remove the mean offset (~800 Muse Units)
             self.eegdf.loc[:, col] *= 1.64498                               # Convert into uV
             self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])        # Apply the bandpass filter
             self.eegdf['Total'] += abs(self.eegdf[col]) / 4                 # Record the Average Amplitude
 
         # Remove High Amplitude Spikes
-        while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
-            self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
-            self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
-            for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-                self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
-                self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
+        self.eegdf = self.eegdf[self.eegdf['Total'] < pulsemax].copy()
+
+        #while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
+        #    self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
+        #    self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
+        #    for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+        #        self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
+        #        self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
 
         self.eegdf.reset_index(inplace=True)
         size = self.eegdf.shape[0]
@@ -1121,7 +1263,7 @@ class EegGui:
         # Plot the Time Domain
         self.y1 = []
         for i, band in enumerate(['', 'Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']):
-            self.y1.append(self.eegdf[['Time', 'EEG1'+band, 'EEG2'+band, 'EEG3'+band, 'EEG4'+band, 'Total']].copy())
+            self.y1.append(self.eegdf[['Time', 'EEG1'+band, 'EEG2'+band, 'EEG3'+band, 'EEG4'+band]].copy()) # 'Total'
 
         self.ys1 = it.cycle(self.y1)
 
@@ -1131,7 +1273,7 @@ class EegGui:
         self.y2 = []
         for i, band in enumerate(['', 'Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']):
             for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-                fft = fftpack.fft(self.eegdf[col+band].copy())[0:size // 2 + 1]
+                fft = fftpack.fft(self.eegdf[col+band].to_numpy())[0:size // 2 + 1]
                 fft = 1/(fs*size) * np.abs(fft)**2
                 fft[2:-2] = [2 * x for x in fft[2:-2]]
                 self.eegdf[col + band + 'fftp'] = pd.Series(fft)
@@ -1145,8 +1287,6 @@ class EegGui:
 
         # Call to plot the graph
         self.switchplot(None)
-        # Call to update the time axis variables
-        self.ploteeg()
 
     # -------------------------------------------------------------------------
     # ploteeg
@@ -1160,20 +1300,18 @@ class EegGui:
         width = self.varXwidth.get() * self.varXFwidth.get() / 100
         lowlim = self.varXoffset.get() - width/2
         upperlim = lowlim + width
-        #for ax in self.axs1:
         self.axs1.set_xlim(lowlim, upperlim)
-        #self.fig1.tight_layout()
         self.fig1.canvas.draw()
         self.fig2.canvas.draw()
 
     # -------------------------------------------------------------------------
-    # plotFeature
+    # plotfeature
     #
     # Description:
     #       This method draws the EEG data.
     #
     # -------------------------------------------------------------------------
-    def plotFeature(self, *args):
+    def plotfeature(self, *args):
         self.axs3.cla()
         x = self.varXax.get()
         y = self.varYax.get()
@@ -1184,13 +1322,13 @@ class EegGui:
             self.fig3.canvas.draw()
 
     # -------------------------------------------------------------------------
-    # plotMarker
+    # plotmarker
     #
     # Description:
     #       This method draws the EEG data.
     #
     # -------------------------------------------------------------------------
-    def plotMarker(self, *args):
+    def plotmarker(self, *args):
         self.axs4.cla()
         df = self.eegdf.loc[self.eegdf['Marker'] == self.varMrk.get()]
         df[['Time', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].plot(kind='line', x='Time', legend=False, ax=self.axs4)
@@ -1206,56 +1344,32 @@ class EegGui:
         # Holds the features for Machine Learning
         feat = []
 
-        # Split the Dataframe by the EEG Bands
-        deltadf = freqdf.loc[(freqdf['Freq'] >= 0) & (freqdf['Freq'] < 4)]
-        thetadf = freqdf.loc[(freqdf['Freq'] >= 4) & (freqdf['Freq'] < 8)]
-        alphadf = freqdf.loc[(freqdf['Freq'] >= 8) & (freqdf['Freq'] < 15)]
-        betadf = freqdf.loc[(freqdf['Freq'] >= 15) & (freqdf['Freq'] < 32)]
-        gammadf = freqdf.loc[(freqdf['Freq'] >= 32) & (freqdf['Freq'] < 100)]
+        # Split the Data Frame by the EEG Bands
+        window = self.varWindow.get()
 
-        mean = {
-            "delta": 0,
-            "theta": 1,
-            "alpha": 2,
-            "beta": 3,
-            "gamma": 4,
-            "phi": 5,
-        }
+        deltamean = freqdf.iloc[:4*window].mean()
+        thetamean = freqdf.iloc[4*window+1:8*window].mean()
+        alphamean = freqdf.iloc[8*window+1:15*window].mean()
+        betamean = freqdf.iloc[15*window+1:32*window].mean()
+        gammamean = freqdf.iloc[32*window+1:].mean()
+        freqmean = freqdf.mean()
 
-        for i, sensor in enumerate(['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']):
-            meanlist = []
-            for df in [deltadf, thetadf, alphadf, betadf, gammadf]:
-                meanlist.append(df[sensor].mean())
-            meanlist.append(freqdf[sensor].mean())
+        for sensor in ['EEG1fft', 'EEG2fft', 'EEG3fft', 'EEG4fft']:
+            delta = deltamean[sensor]
+            theta = thetamean[sensor]
+            alpha = alphamean[sensor]
+            beta = betamean[sensor]
+            gamma = gammamean[sensor]
+            phi = freqmean[sensor]
 
-            delta = meanlist[mean['delta']]
-            theta = meanlist[mean['theta']]
-            alpha = meanlist[mean['alpha']]
-            beta = meanlist[mean['beta']]
-            gamma = meanlist[mean['gamma']]
-            phi = meanlist[mean['phi']]
-            feat.append(delta)
-            feat.append(theta)
-            feat.append(alpha)
-            feat.append(beta)
-            feat.append(gamma)
-            feat.append(phi)
-            feat.append(theta/beta)
-            feat.append(theta/alpha)
-            feat.append(theta/phi)
-            feat.append(theta/(beta + alpha + gamma))
-            feat.append(delta/(beta + alpha + gamma))
-            feat.append(delta/alpha)
-            feat.append(delta/phi)
-            feat.append(delta/beta)
-            feat.append(delta/theta)
-            feat.append((theta + alpha)/beta)
+            feat.extend([delta, theta, alpha, beta, gamma, phi, theta/beta, theta/alpha, theta/phi,
+                         theta/(beta + alpha + gamma), delta/(beta + alpha + gamma), delta/alpha, delta/phi,
+                         delta/beta, delta/theta, (theta + alpha)/beta])
 
         # Check for 'Early' for the old dataset.
         # Check for 'pre' for the new Mining Dataset
         mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
-        feat.append(mental)
-        feat.append(self.filenumber % 5)
+        feat.extend([mental, self.filenumber % 5])
         return feat
 
     # -------------------------------------------------------------------------
@@ -1277,28 +1391,48 @@ class EegGui:
         # Hyperparameters to Test
         param_grid = {'C': [0.1, 1, 10],
                       'gamma': [0.01, 0.1, 1, 10, 'auto', 'scale'],
-                      'kernel': ['rbf'],
+                      'kernel': ['linear'],
                       'class_weight': ['balanced']}
+        #param_grid = {'penalty': ['l1', 'l2'],
+        #              'C': np.logspace(-4, 4, 20)}
 
         # Cross Validation Split by 5 -> Split by File Number % 5
         group = PredefinedSplit(self.traindf['File'].tolist())
+        clf = SVC(kernel='linear')
+        #clf = LogisticRegression()
+        selector = RFECV(clf, step=1, cv=group, verbose=3, n_jobs=-1)
+        selector = selector.fit(x, y)
 
-        self.clf = GridSearchCV(SVC(), param_grid, refit=True, verbose=3, n_jobs=-1, pre_dispatch=8, cv=group)
+        # Display the Best Features
+        self.axs5.cla()
+        self.axs5.plot(range(1, len(selector.grid_scores_) + 1), selector.grid_scores_)
+        self.axs5.set_title('Time Domain:{}'.format(self.file))
+        self.axs5.set_xlabel('Number of Features')
+        self.axs5.set_ylabel('CV Score')
+        self.fig5.canvas.draw()
+
+        #feat = [sel for (sel, i) in zip(self.tstInclst.get(0, END), selector.support_) if i]
+        # print(feat)
+
+        self.clf = GridSearchCV(clf, param_grid, refit=True, verbose=3, n_jobs=-1, pre_dispatch=8, cv=group)
         self.clf.fit(x, y)
-        scoretxt = "Cross Validation: {:.2f}%\n".format(self.clf.best_score_*100)
-        self.tstCSVtxt.insert(INSERT, scoretxt)
-        self.tstCSVtxt.update_idletasks()
+
+        self.varPerfValid.set(self.clf.best_score_)
+        # scoretxt = "Cross Validation: {:.2f}%\n".format(self.clf.best_score_*100)
+        # self.tstCSVtxt.insert(INSERT, scoretxt)
+        # self.tstCSVtxt.update_idletasks()
         print(self.clf.best_estimator_)
         predict = self.clf.predict(x)
-        self.evaluate(y, predict)
+        sens, spec, posp, negp = self.evaluate(y, predict)
 
-        #self.clf = SVC(gamma='auto', kernel='rbf')
-        #self.clf.fit(X, y)
+        # self.clf = SVC(gamma='auto', kernel='rbf')
+        # self.clf.fit(X, y)
+        self.varSensTrain.set(sens)
+        self.varSpecTrain.set(spec)
+        self.varPospTrain.set(posp)
+        self.varNegpTrain.set(negp)
 
-        self.totalfatigue = 0
-        self.totalfresh = 0
-        self.correctfatigue = 0
-        self.correctfresh = 0
+        self.varPerfTrain.set((sens * spec) ** (1 / 2))
 
     # -------------------------------------------------------------------------
     # test
@@ -1321,11 +1455,35 @@ class EegGui:
 
         # Evaluate the Classifier
         predict = self.clf.predict(x)
-        self.evaluate(y, predict)
+        sens, spec, posp, negp = self.evaluate(y, predict)
 
+        self.varSensTest.set(sens)
+        self.varSpecTest.set(spec)
+        self.varPospTest.set(posp)
+        self.varNegpTest.set(negp)
+
+        self.varPerfTest.set((sens * spec) ** (1 / 2))
         # Reset the Test Data Frame and List
         self.testdf = self.testdf.iloc[0:0]
         # self.testlist = []
+
+    # -------------------------------------------------------------------------
+    # test
+    #
+    # Description:
+    #       This method saves the trained model with a pickler.
+    #
+    # -------------------------------------------------------------------------
+    def save(self):
+        # Save the trained model.
+        pd.DataFrame(self.trainlist, columns=self.trainheading).dropna().to_csv('trainlist.csv')
+        pd.DataFrame(self.testlist, columns=self.trainheading).dropna().to_csv('testlist.csv')
+        filename = 'finalized_model.sav'
+        pk.dump(self.clf.best_estimator_, open(filename, 'wb'))
+        mean = self.X.mean(axis=0)
+        var = self.X.std(axis=0)
+        pk.dump(mean, open('mean.sav', 'wb'))
+        pk.dump(var, open('var.sav', 'wb'))
 
     # -------------------------------------------------------------------------
     # test
@@ -1341,12 +1499,7 @@ class EegGui:
         specificity = tp / (tp + fn)
         pospred = tn / (tn + fn)
         negpred = tp / (tp + fp)
-        self.varSensitivity.set(sensitivity)
-        self.varSpecificity.set(specificity)
-        self.varPositivePred.set(pospred)
-        self.varNegativePred.set(negpred)
-
-        self.varPerformance.set((sensitivity * specificity) ** (1 / 2))
+        return sensitivity, specificity, pospred, negpred
 
     # -------------------------------------------------------------------------
     # onClose
@@ -1361,7 +1514,7 @@ class EegGui:
 
 if __name__ == "__main__":
     # Profiler Start
-    useProfile = False
+    useProfile = True
     if useProfile:
         pr = cProfile.Profile()
         pr.enable()
