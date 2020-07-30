@@ -386,7 +386,7 @@ class EegGui:
         self.allLabels['ControlsL.TLabel'].append(self.filPuslbl)
 
         self.varHighCut = tk.IntVar()
-        self.varHighCut.set(249)
+        self.varHighCut.set(100)
         self.varHighCut.trace('w', self.limitlower)
         self.filHigsld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varHighCut, length=150)
         self.filHigsld.grid(row=7, column=1, sticky=E + W)
@@ -404,12 +404,12 @@ class EegGui:
         self.filWinsld.grid(row=9, column=1, sticky=E+W)
 
         self.varPulsemax = tk.IntVar()
-        self.varPulsemax.set(100)
+        self.varPulsemax.set(15)
         self.varPulsemax.trace('w', self.updatepulse)
         self.filPussld = ttk.Scale(self.pagectr[3], from_=1, to=250, variable=self.varPulsemax, length=150)
         self.filPussld.grid(row=10, column=1, sticky=E+W)
 
-        self.filHigval = ttk.Label(self.pagectr[3], text='124.5', style='ControlsL.TLabel')
+        self.filHigval = ttk.Label(self.pagectr[3], text='50', style='ControlsL.TLabel')
         self.filHigval.grid(row=7, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filHigval)
 
@@ -421,7 +421,7 @@ class EegGui:
         self.filDurval.grid(row=9, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filDurval)
 
-        self.filPusval = ttk.Label(self.pagectr[3], text='100 uV', style='ControlsL.TLabel')
+        self.filPusval = ttk.Label(self.pagectr[3], text='15 uV', style='ControlsL.TLabel')
         self.filPusval.grid(row=10, column=2, sticky=W, pady=2, padx=2)
         self.allLabels['ControlsL.TLabel'].append(self.filPusval)
 
@@ -929,6 +929,7 @@ class EegGui:
 
         # Select the Desired Columns
         self.eegdf = rawdf[['Marker', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].copy()
+        self.eegdf = self.eegdf.dropna()
 
         # Refresh the marker option based on marker values
         self.selMrkmnu['menu'].delete(0, 'end')
@@ -1041,6 +1042,8 @@ class EegGui:
             self.trainlist = []
             self.addfeat()
 
+        self.minrow = [100000] * 5
+        self.maxrow = [0] * 5
         self.filelist = iter(sorted(os.listdir(self.folder)))
         self.bar.grid()
         self.bar.config(maximum=len(os.listdir(self.folder)), value=0)
@@ -1061,7 +1064,7 @@ class EegGui:
 
             # Select the Desired Columns
             self.eegdf = rawdf[['Marker', 'EEG1', 'EEG2', 'EEG3', 'EEG4']].copy()
-
+            self.eegdf = self.eegdf.dropna()
             # Prepare the
             self.filenumber = int(''.join(c for c in self.file if c.isdigit()))
             feats = self.preprocess()
@@ -1117,32 +1120,23 @@ class EegGui:
         # Signal Pre-Processing
         [b, a] = signal.butter(4, [self.varLowCut.get() / fs, self.varHighCut.get() / fs], btype='bandpass')
         self.eegdf['Total'] = 0
-        # Place a band stop filter from 55 Hz to 60 Hz
-        # eegmean = self.eegdf.mean()
+        self.eegdf = (self.eegdf - self.eegdf.mean())*1.64498               # Convert into uV
         for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-            self.eegdf[col] -= 800 # eegmean[col]                           # Remove the mean offset (~800 Muse Units)
-            self.eegdf[col] *= 1.64498                                      # Convert into uV
             self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])        # Apply the bandpass filter
-            self.eegdf['Total'] += abs(self.eegdf[col]) / 4                 # Record the Average Amplitude
+        self.eegdf['Total'] = self.eegdf.abs().mean(axis=1)                 # Record the Average Amplitude
 
         # Remove High Amplitude Spikes
-        self.eegdf = self.eegdf[self.eegdf['Total'] < pulsemax].copy()
-
-        #while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
-        #    self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
-        #    self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
-        #    for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
-        #        self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])    # Re-apply bandpass filter
-        #        self.eegdf['Total'] += abs(self.eegdf[col]) / 4             # Record Average Amplitude
+#        for i in range(0, 10, 1):
+#            if not (self.eegdf['Total'] > pulsemax).sum():
+#                break
+        while (self.eegdf['Total'] > pulsemax).sum():
+            self.eegdf = self.eegdf[self.eegdf['Total'] < pulsemax].copy()
+            for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+                self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
+            self.eegdf['Total'] = self.eegdf.abs().mean(axis=1)             # Record the Average Amplitude
 
         self.eegdf.reset_index(inplace=True)
         size = self.eegdf.shape[0]
-        if size < self.minrow[self.filenumber % 5]:
-            self.minrow[self.filenumber % 5] = size
-            print("Min: {}\t{}".format(self.file, size))
-        if size > self.maxrow[self.filenumber % 5]:
-            self.maxrow[self.filenumber % 5] = size
-            print("Max: {}\t{}".format(self.file, size))
 
         # Add a time column 250 Hz
         time = np.linspace(0, size/fs, size)
@@ -1188,15 +1182,20 @@ class EegGui:
         # Signal Pre-Processing
         [b, a] = signal.butter(4, [self.varLowCut.get() / fs, self.varHighCut.get() / fs], btype='bandpass')
         self.eegdf['Total'] = 0
+
         for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+            self.eegdf[col + 'Raw'] = self.eegdf[col].copy()
             self.eegdf[col] -= 800# self.eegdf[col].mean()                       # Remove the mean offset (~800 Muse Units)
             self.eegdf.loc[:, col] *= 1.64498                               # Convert into uV
+            self.eegdf[col + 'uV'] = self.eegdf[col].copy()
             self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])        # Apply the bandpass filter
+            self.eegdf[col + 'Filter'] = self.eegdf[col].copy()
             self.eegdf['Total'] += abs(self.eegdf[col]) / 4                 # Record the Average Amplitude
 
         # Remove High Amplitude Spikes
         self.eegdf = self.eegdf[self.eegdf['Total'] < pulsemax].copy()
-
+        for col in ['EEG1', 'EEG2', 'EEG3', 'EEG4']:
+            self.eegdf[col] = signal.filtfilt(b, a, self.eegdf[col])
         #while not self.eegdf[self.eegdf['Total'] > 15].copy().empty:
         #    self.eegdf = self.eegdf[self.eegdf['Total'] < 15].copy()        # Remove High Amplitude Samples
         #    self.eegdf['Total'] = 0                                         # Reset the Average Amplitude
@@ -1262,7 +1261,7 @@ class EegGui:
 
         # Plot the Time Domain
         self.y1 = []
-        for i, band in enumerate(['', 'Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']):
+        for i, band in enumerate(['', 'Raw', 'uV', 'Filter', 'Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']):
             self.y1.append(self.eegdf[['Time', 'EEG1'+band, 'EEG2'+band, 'EEG3'+band, 'EEG4'+band]].copy()) # 'Total'
 
         self.ys1 = it.cycle(self.y1)
@@ -1369,7 +1368,10 @@ class EegGui:
         # Check for 'Early' for the old dataset.
         # Check for 'pre' for the new Mining Dataset
         mental = "Not Fatigued" if 'pre' in self.filename else "Fatigued"
-        feat.extend([mental, self.filenumber % 5])
+        if self.testing == "Train":
+            feat.extend([mental, self.filenumber % 5])
+        else:
+            feat.extend([mental, self.filenumber])
         return feat
 
     # -------------------------------------------------------------------------
@@ -1391,42 +1393,23 @@ class EegGui:
         # Hyperparameters to Test
         param_grid = {'C': [0.1, 1, 10],
                       'gamma': [0.01, 0.1, 1, 10, 'auto', 'scale'],
-                      'kernel': ['linear'],
+        #param_grid = {'C': [1],
+        #              'gamma': ['scale'],
+                      'kernel': ['rbf'],
                       'class_weight': ['balanced']}
-        #param_grid = {'penalty': ['l1', 'l2'],
-        #              'C': np.logspace(-4, 4, 20)}
 
         # Cross Validation Split by 5 -> Split by File Number % 5
         group = PredefinedSplit(self.traindf['File'].tolist())
-        clf = SVC(kernel='linear')
-        #clf = LogisticRegression()
-        selector = RFECV(clf, step=1, cv=group, verbose=3, n_jobs=-1)
-        selector = selector.fit(x, y)
-
-        # Display the Best Features
-        self.axs5.cla()
-        self.axs5.plot(range(1, len(selector.grid_scores_) + 1), selector.grid_scores_)
-        self.axs5.set_title('Time Domain:{}'.format(self.file))
-        self.axs5.set_xlabel('Number of Features')
-        self.axs5.set_ylabel('CV Score')
-        self.fig5.canvas.draw()
-
-        #feat = [sel for (sel, i) in zip(self.tstInclst.get(0, END), selector.support_) if i]
-        # print(feat)
+        clf = SVC(kernel='rbf')
 
         self.clf = GridSearchCV(clf, param_grid, refit=True, verbose=3, n_jobs=-1, pre_dispatch=8, cv=group)
         self.clf.fit(x, y)
 
         self.varPerfValid.set(self.clf.best_score_)
-        # scoretxt = "Cross Validation: {:.2f}%\n".format(self.clf.best_score_*100)
-        # self.tstCSVtxt.insert(INSERT, scoretxt)
-        # self.tstCSVtxt.update_idletasks()
         print(self.clf.best_estimator_)
         predict = self.clf.predict(x)
         sens, spec, posp, negp = self.evaluate(y, predict)
 
-        # self.clf = SVC(gamma='auto', kernel='rbf')
-        # self.clf.fit(X, y)
         self.varSensTrain.set(sens)
         self.varSpecTrain.set(spec)
         self.varPospTrain.set(posp)
@@ -1514,7 +1497,7 @@ class EegGui:
 
 if __name__ == "__main__":
     # Profiler Start
-    useProfile = True
+    useProfile = False
     if useProfile:
         pr = cProfile.Profile()
         pr.enable()
