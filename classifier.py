@@ -1391,10 +1391,10 @@ class EegGui:
         y = self.traindf.loc[:, "Class"].to_numpy()
 
         # Hyperparameters to Test
-        param_grid = {'C': [0.1, 1, 10],
-                      'gamma': [0.01, 0.1, 1, 10, 'auto', 'scale'],
-        #param_grid = {'C': [1],
-        #              'gamma': ['scale'],
+        #param_grid = {'C': [0.008, 0.009, 0.01, 0.012, 0.013],
+        #              'gamma': [0.008, 0.009, 0.01, 0.012, 0.013],
+        param_grid = {'C': [1],
+                      'gamma': ['scale'],
                       'kernel': ['rbf'],
                       'class_weight': ['balanced']}
 
